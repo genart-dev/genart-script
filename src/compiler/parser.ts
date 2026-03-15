@@ -324,7 +324,7 @@ export function parse(tokens: Token[]): Program {
         const count = parseSimpleExpr();
         let collect = false;
         if (check("op", "=>")) { eat("op", "=>"); collect = true; }
-        eat("op", ":");
+        else { eat("op", ":"); }
         header = { type: "loop", count, collect };
         break;
       }
@@ -490,7 +490,7 @@ export function parse(tokens: Token[]): Program {
     if (t.kind === "lparen") {
       // Could be lambda `(x, y) =>` or grouped expr `(expr)`
       eat("lparen");
-      if (cur().kind === "ident" && (peek(1).kind === "op" && (peek(1).value === "," || peek(1).value === ")")) ) {
+      if (cur().kind === "ident" && (peek(1).kind === "rparen" || (peek(1).kind === "op" && peek(1).value === ",")) ) {
         // Try lambda parse
         const params: string[] = [];
         while (!check("rparen")) {

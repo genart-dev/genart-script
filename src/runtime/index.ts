@@ -8,11 +8,11 @@
 import { PRNG, defaultPRNG } from "./prng";
 import { noise1, noise2, noise3, noiseSeed } from "./noise";
 import { colorAlpha, linearGradient, radialGradient } from "./color";
-import { PI, TWO_PI, HALF_PI, lerp, clamp, map, dist, sin, cos, tan, atan2, sqrt, abs, floor, ceil, round, min, max, pow, log, exp } from "./math";
+import { PI, TWO_PI, HALF_PI, lerp, clamp, map, dist, range, sin, cos, tan, atan2, sqrt, abs, floor, ceil, round, min, max, pow, log, exp } from "./math";
 
 export { PRNG, defaultPRNG };
 export { noise1, noise2, noise3, noiseSeed };
-export { PI, TWO_PI, HALF_PI, lerp, clamp, map, dist, sin, cos, tan, atan2, sqrt, abs, floor, ceil, round, min, max, pow, log, exp };
+export { PI, TWO_PI, HALF_PI, lerp, clamp, map, dist, range, sin, cos, tan, atan2, sqrt, abs, floor, ceil, round, min, max, pow, log, exp };
 export { colorAlpha, linearGradient, radialGradient };
 
 /**
@@ -50,8 +50,19 @@ export function buildGlobals(
 
     // Math
     PI, TWO_PI, HALF_PI,
-    lerp, clamp, map, dist,
+    lerp, clamp, map, dist, range,
     sin, cos, tan, atan2, sqrt, abs, floor, ceil, round, min, max, pow, log, exp,
+
+    // Array helpers (use seeded PRNG for reproducibility)
+    pick: <T>(arr: T[]): T => arr[Math.floor(defaultPRNG.rnd(arr.length))]!,
+    shuffle: <T>(arr: T[]): T[] => {
+      const out = [...arr];
+      for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(defaultPRNG.rnd(i + 1));
+        [out[i], out[j]] = [out[j]!, out[i]!];
+      }
+      return out;
+    },
 
     // Color helpers used by compiled code
     __colorAlpha__: colorAlpha,
@@ -72,10 +83,13 @@ export interface RuntimeGlobals {
   noise: (x: number, y?: number, z?: number) => number;
   PI: number; TWO_PI: number; HALF_PI: number;
   lerp: typeof lerp; clamp: typeof clamp; map: typeof map; dist: typeof dist;
+  range: typeof range;
   sin: typeof sin; cos: typeof cos; tan: typeof tan; atan2: typeof atan2;
   sqrt: typeof sqrt; abs: typeof abs; floor: typeof floor; ceil: typeof ceil;
   round: typeof round; min: typeof min; max: typeof max; pow: typeof pow;
   log: typeof log; exp: typeof exp;
+  pick: <T>(arr: T[]) => T;
+  shuffle: <T>(arr: T[]) => T[];
   __colorAlpha__: typeof colorAlpha;
   __linearGradient__: (angle: number, stops: string[]) => CanvasGradient;
   __radialGradient__: (cx: number, cy: number, stops: string[]) => CanvasGradient;

@@ -14,3 +14,16 @@ export function dist(x1: number, y1: number, x2: number, y2: number): number {
 }
 
 export const { sin, cos, tan, atan2, sqrt, abs, floor, ceil, round, min, max, pow, log, exp } = Math;
+
+/**
+ * Generate a numeric range array.
+ * `range(n)` → [0, 1, ..., n-1]
+ * `range(start, end)` → [start, ..., end-1]
+ * `range(start, end, step)` → values from start up to (not including) end, incrementing by step
+ */
+export function range(n: number, end?: number, step = 1): number[] {
+  const [start, stop] = end === undefined ? [0, n] : [n, end];
+  const result: number[] = [];
+  for (let i = start; i < stop; i += step) result.push(i);
+  return result;
+}

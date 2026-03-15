@@ -151,7 +151,7 @@ export function tokenize(source: string): Token[] {
 
       // Two-char operators
       const two = text.slice(pos, pos + 2);
-      if (["==", "!=", "<=", ">=", "**"].includes(two)) {
+      if (["==", "!=", "<=", ">=", "**", "&&", "||"].includes(two)) {
         tokens.push({ kind: "op", value: two, line, col });
         pos += 2;
         continue;

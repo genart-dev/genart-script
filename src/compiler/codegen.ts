@@ -402,6 +402,22 @@ export function codegen(program: Program): CompileResult {
     }
   }
 
+  /** Recursively checks if an expression references the implicit `it` variable. */
+  function containsIt(expr: Expr): boolean {
+    switch (expr.kind) {
+      case "ident": return expr.name === "it";
+      case "binop": return containsIt(expr.left) || containsIt(expr.right);
+      case "unary": return containsIt(expr.operand);
+      case "ternary": return containsIt(expr.cond) || containsIt(expr.then) || containsIt(expr.else);
+      case "call": return containsIt(expr.callee) || expr.args.some(containsIt);
+      case "prop": return containsIt(expr.object);
+      case "index": return containsIt(expr.object) || containsIt(expr.index);
+      case "array": return expr.elements.some(containsIt);
+      case "lambda": return false; // `it` inside explicit lambda is scoped
+      default: return false;
+    }
+  }
+
   function emitExpr(expr: Expr): string {
     switch (expr.kind) {
       case "number": return String(expr.value);
@@ -415,8 +431,18 @@ export function codegen(program: Program): CompileResult {
       }
       case "unary": return `(${expr.op}${emitExpr(expr.operand)})`;
       case "ternary": return `(${emitExpr(expr.cond)} ? ${emitExpr(expr.then)} : ${emitExpr(expr.else)})`;
-      case "call": return `${emitExpr(expr.callee)}(${expr.args.map(emitExpr).join(", ")})`;
-      case "prop": return `${emitExpr(expr.object)}.${expr.prop}`;
+      case "call": {
+        // Auto-wrap args containing implicit `it` in a lambda: arr.map(it * 2) → arr.map((it) => it * 2)
+        const args = expr.args.map(arg =>
+          arg.kind !== "lambda" && containsIt(arg)
+            ? `(it) => ${emitExpr(arg)}`
+            : emitExpr(arg)
+        );
+        return `${emitExpr(expr.callee)}(${args.join(", ")})`;
+      }
+      case "prop":
+        // Map .each → .forEach (GenArt Script uses `.each`, JS uses `.forEach`)
+        return `${emitExpr(expr.object)}.${expr.prop === "each" ? "forEach" : expr.prop}`;
       case "index": return `${emitExpr(expr.object)}[${emitExpr(expr.index)}]`;
       case "array": return `[${expr.elements.map(emitExpr).join(", ")}]`;
       case "lambda": {
