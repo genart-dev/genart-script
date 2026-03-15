@@ -78,6 +78,35 @@ export function buildGlobals(
 
     // Vector type — `v = vec(x, y)`, then `v.add(u)`, `v.mag()`, etc.
     vec,
+
+    // Image loading — synchronous return; load starts in background.
+    // `ctx.drawImage` on an unloaded image is a no-op in all browsers.
+    load: (url: string): HTMLImageElement => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = url;
+      return img;
+    },
+
+    // Font loading — async via FontFace API; use `await loadFont(...)` inside `once:`.
+    // Returns a font descriptor `{ family }` for use with `text ... font:f`.
+    loadFont: async (family: string, url: string): Promise<{ family: string }> => {
+      const face = new FontFace(family, `url(${url})`);
+      await face.load();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (document.fonts as any).add(face);
+      return { family };
+    },
+
+    // Text measurement — returns { width, height } for the given string.
+    // height is approximated as `size` (actual line metrics vary by font).
+    measure: (text: string, size = 16, family = "sans-serif"): { width: number; height: number } => {
+      const saved = ctx.font;
+      ctx.font = `${size}px ${family}`;
+      const m = ctx.measureText(text);
+      ctx.font = saved;
+      return { width: m.width, height: size };
+    },
   };
 }
 
@@ -133,4 +162,7 @@ export interface RuntimeGlobals {
   __radialGradient__: (cx: number, cy: number, stops: string[]) => CanvasGradient;
   buffer: (w: number, h: number) => HTMLCanvasElement;
   vec: (x: number, y: number) => Vec;
+  load: (url: string) => HTMLImageElement;
+  loadFont: (family: string, url: string) => Promise<{ family: string }>;
+  measure: (text: string, size?: number, family?: string) => { width: number; height: number };
 }

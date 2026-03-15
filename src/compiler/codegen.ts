@@ -79,10 +79,10 @@ export function codegen(program: Program): CompileResult {
     lines.push(``);
   }
 
-  // once: block
+  // once: block — always async to support `await loadFont(...)` inside
   if (onceBlock) {
     lines.push(`// --- once: ---`);
-    lines.push(`function __once__(__ctx__) {`);
+    lines.push(`async function __once__(__ctx__) {`);
     lines.push(`  const ctx = __ctx__;`);
     emitBody(onceBlock.body, lines, 1);
     lines.push(`}`);
@@ -283,18 +283,28 @@ export function codegen(program: Program): CompileResult {
         break;
       }
       case "draw": {
-        // draw buf x y [w:N h:N alpha:N blend:mode]
+        // draw src x y [w:N h:N alpha:N blend:mode tint:color]
         const [src, x, y] = p;
         const w2 = n("w");
         const h2 = n("h");
         const alpha = n("alpha");
-        if (alpha) { out.push(`${I}ctx.save(); ctx.globalAlpha = ${emitExpr(alpha)};`); }
-        if (w2 && h2) {
-          out.push(`${I}ctx.drawImage(${emitExpr(src!)}, ${emitExpr(x!)}, ${emitExpr(y!)}, ${emitExpr(w2)}, ${emitExpr(h2)});`);
-        } else {
-          out.push(`${I}ctx.drawImage(${emitExpr(src!)}, ${emitExpr(x!)}, ${emitExpr(y!)});`);
+        const tint = n("tint");
+        const needsSave = !!(alpha || tint);
+        if (needsSave) out.push(`${I}ctx.save();`);
+        if (alpha) out.push(`${I}ctx.globalAlpha = ${emitExpr(alpha)};`);
+        const dw = w2 ? emitExpr(w2) : `${emitExpr(src!)}.width`;
+        const dh = h2 ? emitExpr(h2) : `${emitExpr(src!)}.height`;
+        const iStr = w2 && h2
+          ? `${emitExpr(src!)}, ${emitExpr(x!)}, ${emitExpr(y!)}, ${emitExpr(w2)}, ${emitExpr(h2)}`
+          : `${emitExpr(src!)}, ${emitExpr(x!)}, ${emitExpr(y!)}`;
+        out.push(`${I}ctx.drawImage(${iStr});`);
+        if (tint) {
+          // Color multiply overlay — draw tint rect with "multiply" over the image area
+          out.push(`${I}ctx.globalCompositeOperation = "multiply";`);
+          out.push(`${I}ctx.fillStyle = ${emitColor(tint)};`);
+          out.push(`${I}ctx.fillRect(${emitExpr(x!)}, ${emitExpr(y!)}, ${dw}, ${dh});`);
         }
-        if (alpha) out.push(`${I}ctx.restore();`);
+        if (needsSave) out.push(`${I}ctx.restore();`);
         break;
       }
       case "text": {

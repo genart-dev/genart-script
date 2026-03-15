@@ -338,3 +338,38 @@ describe("compile — Phase 4 drawing polish", () => {
     expect(r.code).toContain('let bg = __colors__["bg"] ?? "#1a1a2e"');
   });
 });
+
+describe("compile — Phase 5 images + typography", () => {
+  it("once: block becomes async function", () => {
+    const r = compile("once:\n  bg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("async function __once__");
+  });
+
+  it("draw with tint emits multiply composite overlay", () => {
+    const r = compile("draw img 0 0 tint:coral");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('ctx.drawImage(img,');
+    expect(r.code).toContain('"multiply"');
+    expect(r.code).toContain('"coral"');
+    expect(r.code).toContain('ctx.fillRect(');
+  });
+
+  it("draw with tint and explicit size", () => {
+    const r = compile("draw img 10 20 w:100 h:80 tint:#f00");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("ctx.drawImage(img, 10, 20, 100, 80)");
+  });
+
+  it("text command with size and font", () => {
+    const r = compile('text "hello" 100 200 size:24');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("ctx.font =");
+    expect(r.code).toContain("24");
+    expect(r.code).toContain('ctx.fillText("hello", 100, 200)');
+  });
+});
