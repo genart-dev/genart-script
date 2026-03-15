@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PRNG, noise1, noise2, noise3, lerp, clamp, map, dist, colorAlpha } from "./index";
+import { PRNG, noise1, noise2, noise3, lerp, clamp, map, dist, colorAlpha, vec } from "./index";
 
 describe("PRNG", () => {
   it("produces values in range [0, 1) with rnd(1)", () => {
@@ -124,5 +124,64 @@ describe("colorAlpha", () => {
   it("returns original string for unknown color", () => {
     const result = colorAlpha("unknowncolor", 0.5);
     expect(result).toBe("unknowncolor");
+  });
+});
+
+describe("vec", () => {
+  it("stores x and y", () => {
+    const v = vec(3, 4);
+    expect(v.x).toBe(3);
+    expect(v.y).toBe(4);
+  });
+
+  it("add returns new vec", () => {
+    const r = vec(1, 2).add(vec(3, 4));
+    expect(r.x).toBe(4);
+    expect(r.y).toBe(6);
+  });
+
+  it("sub returns new vec", () => {
+    const r = vec(5, 3).sub(vec(2, 1));
+    expect(r.x).toBe(3);
+    expect(r.y).toBe(2);
+  });
+
+  it("mult scales by scalar", () => {
+    const r = vec(2, 3).mult(4);
+    expect(r.x).toBe(8);
+    expect(r.y).toBe(12);
+  });
+
+  it("mag returns length", () => {
+    expect(vec(3, 4).mag()).toBeCloseTo(5);
+  });
+
+  it("norm returns unit vector", () => {
+    const n = vec(3, 4).norm();
+    expect(n.mag()).toBeCloseTo(1);
+  });
+
+  it("norm of zero vec returns zero vec", () => {
+    const n = vec(0, 0).norm();
+    expect(n.x).toBe(0);
+    expect(n.y).toBe(0);
+  });
+
+  it("dot product", () => {
+    expect(vec(1, 0).dot(vec(0, 1))).toBe(0);
+    expect(vec(1, 0).dot(vec(1, 0))).toBe(1);
+    expect(vec(2, 3).dot(vec(4, 5))).toBe(23);
+  });
+
+  it("angle returns atan2(y, x)", () => {
+    expect(vec(1, 0).angle()).toBeCloseTo(0);
+    expect(vec(0, 1).angle()).toBeCloseTo(Math.PI / 2);
+  });
+
+  it("chaining works", () => {
+    const r = vec(1, 0).mult(5).add(vec(0, 3));
+    expect(r.x).toBe(5);
+    expect(r.y).toBe(3);
+    expect(r.mag()).toBeCloseTo(Math.sqrt(34));
   });
 });

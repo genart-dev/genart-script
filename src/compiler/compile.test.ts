@@ -267,3 +267,74 @@ describe("compile — error reporting", () => {
     }
   });
 });
+
+describe("compile — Phase 4 drawing polish", () => {
+  it("linear gradient emits without ctx arg (bug fix)", () => {
+    const r = compile("circle w/2 h/2 r:100 fill:linear(#000,#fff)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("__linearGradient__(0,");
+    expect(r.code).not.toContain("__linearGradient__(ctx,");
+  });
+
+  it("linear gradient with angle", () => {
+    const r = compile("circle 0 0 r:50 fill:linear(#f00,#00f angle:90)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("__linearGradient__(90,");
+  });
+
+  it("radial gradient emits without ctx arg (bug fix)", () => {
+    const r = compile("circle w/2 h/2 r:100 fill:radial(#fff,#000)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("__radialGradient__(");
+    expect(r.code).not.toContain("__radialGradient__(ctx,");
+  });
+
+  it("use easing inlines easing functions", () => {
+    const r = compile("use easing\nx = ease_in(0.5)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("const ease_in =");
+    expect(r.code).toContain("const ease_out =");
+    expect(r.code).toContain("const bounce =");
+  });
+
+  it("use shapes inlines star/hexagon/arrow", () => {
+    const r = compile("use shapes\nstar w/2 h/2 5 50");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("function star(");
+    expect(r.code).toContain("function hexagon(");
+    expect(r.code).toContain("function arrow(");
+  });
+
+  it("use palettes inlines named arrays", () => {
+    const r = compile("use palettes\nbg nord[0]");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("const nord =");
+    expect(r.code).toContain("const solarized =");
+    expect(r.code).toContain("const pastel =");
+    expect(r.code).toContain("const earth =");
+  });
+
+  it("param declaration extracts to result.params", () => {
+    const r = compile('param count 100 range:10..500 label:"Count"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params).toHaveLength(1);
+    expect(r.params[0]).toMatchObject({ key: "count", default: 100, min: 10, max: 500 });
+    expect(r.code).toContain('let count = __params__["count"] ?? 100');
+  });
+
+  it("color declaration extracts to result.colors", () => {
+    const r = compile('color bg #1a1a2e label:"Background"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.colors).toHaveLength(1);
+    expect(r.colors[0]).toMatchObject({ key: "bg", default: "#1a1a2e" });
+    expect(r.code).toContain('let bg = __colors__["bg"] ?? "#1a1a2e"');
+  });
+});

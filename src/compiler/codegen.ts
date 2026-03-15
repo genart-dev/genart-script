@@ -6,6 +6,7 @@ import type {
   Gradient, Lambda, NumberLit, StringLit, ColorLit, Ident,
 } from "./ast";
 import type { CompileResult, ParamExtract, ColorExtract } from "../index";
+import { EASING_LIB, SHAPES_LIB, PALETTES_LIB } from "./libs";
 
 const VERSION = "0.1.0";
 
@@ -40,6 +41,11 @@ export function codegen(program: Program): CompileResult {
     lines.push(`let ${c.key} = __colors__["${c.key}"] ?? "${c.default}";`);
   }
   if (params.length || colors.length) lines.push(``);
+
+  // Inline standard libraries requested via `use`
+  if (usedLibs.has("easing")) { lines.push(EASING_LIB); lines.push(``); }
+  if (usedLibs.has("shapes")) { lines.push(SHAPES_LIB); lines.push(``); }
+  if (usedLibs.has("palettes")) { lines.push(PALETTES_LIB); lines.push(``); }
 
   // Separate top-level body into sections
   const staticStmts: Stmt[] = [];
@@ -469,11 +475,11 @@ export function codegen(program: Program): CompileResult {
     const stops = g.stops.map(emitColor);
     if (g.type === "linear") {
       const angle = g.angle ? emitExpr(g.angle) : "0";
-      return `__linearGradient__(ctx, ${angle}, [${stops.join(", ")}])`;
+      return `__linearGradient__(${angle}, [${stops.join(", ")}])`;
     } else {
       const cx = g.cx ? emitExpr(g.cx) : "w/2";
       const cy = g.cy ? emitExpr(g.cy) : "h/2";
-      return `__radialGradient__(ctx, ${cx}, ${cy}, [${stops.join(", ")}])`;
+      return `__radialGradient__(${cx}, ${cy}, [${stops.join(", ")}])`;
     }
   }
 }

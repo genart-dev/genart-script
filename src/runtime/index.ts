@@ -75,7 +75,38 @@ export function buildGlobals(
       c.width = bw; c.height = bh;
       return c;
     },
+
+    // Vector type — `v = vec(x, y)`, then `v.add(u)`, `v.mag()`, etc.
+    vec,
   };
+}
+
+/** Standalone `vec` factory — also available as a global in compiled scripts. */
+export function vec(x: number, y: number): Vec { return buildVec(x, y); }
+
+// Internal helper — avoids re-capturing closure each time
+function buildVec(x: number, y: number): Vec {
+  return {
+    x, y,
+    add: (u) => buildVec(x + u.x, y + u.y),
+    sub: (u) => buildVec(x - u.x, y - u.y),
+    mult: (n) => buildVec(x * n, y * n),
+    mag: () => Math.sqrt(x * x + y * y),
+    norm: () => { const m = Math.sqrt(x * x + y * y); return m ? buildVec(x / m, y / m) : buildVec(0, 0); },
+    dot: (u) => x * u.x + y * u.y,
+    angle: () => Math.atan2(y, x),
+  };
+}
+
+export interface Vec {
+  x: number; y: number;
+  add(v: Vec): Vec;
+  sub(v: Vec): Vec;
+  mult(n: number): Vec;
+  mag(): number;
+  norm(): Vec;
+  dot(v: Vec): number;
+  angle(): number;
 }
 
 export interface RuntimeGlobals {
@@ -101,4 +132,5 @@ export interface RuntimeGlobals {
   __linearGradient__: (angle: number, stops: string[]) => CanvasGradient;
   __radialGradient__: (cx: number, cy: number, stops: string[]) => CanvasGradient;
   buffer: (w: number, h: number) => HTMLCanvasElement;
+  vec: (x: number, y: number) => Vec;
 }
