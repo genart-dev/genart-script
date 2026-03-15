@@ -68,6 +68,13 @@ export function buildGlobals(
     __colorAlpha__: colorAlpha,
     __linearGradient__: (angle: number, stops: string[]) => linearGradient(ctx, angle, stops),
     __radialGradient__: (cx: number, cy: number, stops: string[]) => radialGradient(ctx, cx, cy, stops),
+
+    // Offscreen buffer — `buf = buffer(w, h)` then `into buf:` / `draw buf x y`
+    buffer: (bw: number, bh: number): HTMLCanvasElement => {
+      const c = document.createElement("canvas");
+      c.width = bw; c.height = bh;
+      return c;
+    },
   };
 }
 
@@ -93,4 +100,5 @@ export interface RuntimeGlobals {
   __colorAlpha__: typeof colorAlpha;
   __linearGradient__: (angle: number, stops: string[]) => CanvasGradient;
   __radialGradient__: (cx: number, cy: number, stops: string[]) => CanvasGradient;
+  buffer: (w: number, h: number) => HTMLCanvasElement;
 }

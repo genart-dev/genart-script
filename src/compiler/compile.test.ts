@@ -215,6 +215,46 @@ describe("compile — expressions", () => {
   });
 });
 
+describe("compile — Phase 3 interactivity", () => {
+  it("on click: wires canvas event listener", () => {
+    const r = compile('on click:\n  circle mouseX mouseY r:10 fill:white');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('__canvas__.addEventListener("click"');
+    expect(r.code).toContain("mouseX");
+  });
+
+  it("on key: filters by key value", () => {
+    const r = compile('on key "r":\n  bg black');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('addEventListener("keydown"');
+    expect(r.code).toContain('"r"');
+  });
+
+  it("watch emits guarded __watch__ call", () => {
+    const r = compile('watch "x" 42');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('typeof __watch__ !== "undefined"');
+    expect(r.code).toContain('__watch__("x",');
+  });
+
+  it("into buf: redirects ctx to buffer", () => {
+    const r = compile('buf = buffer(w, h)\ninto buf:\n  bg red');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('buf.getContext("2d")');
+  });
+
+  it("draw buf x y emits drawImage", () => {
+    const r = compile('buf = buffer(200, 200)\ndraw buf 0 0');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('ctx.drawImage(buf,');
+  });
+});
+
 describe("compile — error reporting", () => {
   it("returns CompileFailure with location on parse error", () => {
     // Deliberate syntax error
