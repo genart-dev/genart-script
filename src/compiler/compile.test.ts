@@ -373,3 +373,22 @@ describe("compile — Phase 5 images + typography", () => {
     expect(r.code).toContain('ctx.fillText("hello", 100, 200)');
   });
 });
+
+describe("compile — Phase 6 post-processing", () => {
+  it("post: block compiles with render context param", () => {
+    const r = compile("post:\n  vignette(0.6)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("function __post__(__ctx__, __renderContext__)");
+    expect(r.code).toContain("vignette(0.6)");
+    expect(r.code).toContain("post: __post__");
+  });
+
+  it("post: block has access to renderContext", () => {
+    const r = compile('post:\n  if __renderContext__ == "static":\n    blur(2)');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("__renderContext__");
+    expect(r.code).toContain("blur(2)");
+  });
+});

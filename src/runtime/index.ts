@@ -9,6 +9,7 @@ import { PRNG, defaultPRNG } from "./prng";
 import { noise1, noise2, noise3, noiseSeed } from "./noise";
 import { colorAlpha, linearGradient, radialGradient } from "./color";
 import { PI, TWO_PI, HALF_PI, lerp, clamp, map, dist, range, sin, cos, tan, atan2, sqrt, abs, floor, ceil, round, min, max, pow, log, exp } from "./math";
+import { makeEffects } from "./effects";
 
 export { PRNG, defaultPRNG };
 export { noise1, noise2, noise3, noiseSeed };
@@ -78,6 +79,11 @@ export function buildGlobals(
 
     // Vector type — `v = vec(x, y)`, then `v.add(u)`, `v.mag()`, etc.
     vec,
+
+    // Post-processing effects — available anywhere, designed for `post:` blocks.
+    // Derive logical dimensions from the canvas transform (adapter calls ctx.scale(density, density)
+    // before buildGlobals, so transform.a == density). Falls back to physical size at density=1.
+    ...makeEffects(ctx, Math.round(ctx.canvas.width / (ctx.getTransform().a || 1)), Math.round(ctx.canvas.height / (ctx.getTransform().d || 1))),
 
     // Image loading — synchronous return; load starts in background.
     // `ctx.drawImage` on an unloaded image is a no-op in all browsers.
@@ -165,4 +171,12 @@ export interface RuntimeGlobals {
   load: (url: string) => HTMLImageElement;
   loadFont: (family: string, url: string) => Promise<{ family: string }>;
   measure: (text: string, size?: number, family?: string) => { width: number; height: number };
+  // Post-processing effects
+  vignette: (strength?: number) => void;
+  grain: (amount?: number) => void;
+  grade: (contrast?: number, saturation?: number, brightness?: number, hue?: number) => void;
+  blur: (radius: number) => void;
+  scanlines: (opacity?: number) => void;
+  pixelate: (blockSize: number) => void;
+  bloom: (strength?: number, radius?: number) => void;
 }
