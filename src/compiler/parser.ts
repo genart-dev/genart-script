@@ -474,6 +474,12 @@ export function parse(tokens: Token[]): Program {
           const prop = eat("ident").value;
           expr = { kind: "prop", object: expr, prop, loc: l };
         }
+      } else if (check("lbracket")) {
+        const l = loc();
+        eat("lbracket");
+        const index = parseExpr();
+        eat("rbracket");
+        expr = { kind: "index", object: expr, index, loc: l };
       } else if (check("lparen")) {
         const l = loc();
         eat("lparen");

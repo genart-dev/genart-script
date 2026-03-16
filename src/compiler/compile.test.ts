@@ -651,3 +651,33 @@ describe("compile — object literals", () => {
     expect(r.code).toContain("({seed: 42, width: w, height: h})");
   });
 });
+
+describe("compile — bracket indexing", () => {
+  it("simple bracket index", () => {
+    const r = compile("x = arr[0]");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("arr[0]");
+  });
+
+  it("bracket index with expression", () => {
+    const r = compile("x = arr[i % arr.length]");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("arr[(i % arr.length)]");
+  });
+
+  it("chained bracket and dot access", () => {
+    const r = compile("x = arr[0].name");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("arr[0].name");
+  });
+
+  it("nested bracket index", () => {
+    const r = compile("x = grid[i][j]");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("grid[i][j]");
+  });
+});
