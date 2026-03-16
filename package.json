@@ -1,6 +1,6 @@
 {
   "name": "@genart-dev/genart-script",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Compiler and runtime for the GenArt Script language (.genart-script / .gs)",
   "type": "module",
   "exports": {
