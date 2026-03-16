@@ -510,6 +510,29 @@ export function parse(tokens: Token[]): Program {
       return { kind: "color", value: t.value, alpha, loc: l };
     }
 
+    // $varname color variable reference with optional alpha shorthand
+    if (t.kind === "color-ref") {
+      pos++;
+      const varName = t.value;
+      // check for alpha shorthand: $star.08
+      if (check("op", ".") && peek(1).kind === "number") {
+        eat("op", ".");
+        const alpha = Number(eat("number").value);
+        // Emit as a call: __colorAlpha__(varname, alpha/100)
+        return {
+          kind: "call",
+          callee: { kind: "ident", name: "__colorAlpha__", loc: l },
+          args: [
+            { kind: "ident", name: varName, loc: l },
+            { kind: "number", value: alpha / 100, loc: l },
+          ],
+          loc: l,
+        };
+      }
+      // No alpha — just a reference to the color variable
+      return { kind: "ident", name: varName, loc: l };
+    }
+
     if (t.kind === "lparen") {
       // Could be lambda `(x, y) =>` or grouped expr `(expr)`
       eat("lparen");

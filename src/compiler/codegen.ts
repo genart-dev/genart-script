@@ -30,6 +30,20 @@ export function codegen(program: Program): CompileResult {
     }
   }
 
+  /** Track declared variables per scope depth to avoid duplicate `let`. */
+  const declaredVars: Set<string>[] = [new Set()];
+
+  function isDeclared(name: string): boolean {
+    for (let i = declaredVars.length - 1; i >= 0; i--) {
+      if (declaredVars[i]!.has(name)) return true;
+    }
+    return false;
+  }
+
+  function declare(name: string): void {
+    declaredVars[declaredVars.length - 1]!.add(name);
+  }
+
   const lines: string[] = [
     `// GenArt Script compiled output — compiler v${VERSION}`,
     `// DO NOT EDIT — generated from .genart-script source`,
@@ -39,9 +53,11 @@ export function codegen(program: Program): CompileResult {
   // Param/color injections as globals
   for (const p of params) {
     lines.push(`let ${p.key} = __params__["${p.key}"] ?? ${p.default};`);
+    declaredVars[0]!.add(p.key);
   }
   for (const c of colors) {
     lines.push(`let ${c.key} = __colors__["${c.key}"] ?? "${c.default}";`);
+    declaredVars[0]!.add(c.key);
   }
   if (params.length || colors.length) lines.push(``);
 
@@ -141,10 +157,22 @@ export function codegen(program: Program): CompileResult {
     const I = indent(d);
     switch (stmt.kind) {
       case "assign":
-        out.push(`${I}let ${stmt.name} = ${emitExpr(stmt.value)};`);
+        if (isDeclared(stmt.name)) {
+          out.push(`${I}${stmt.name} = ${emitExpr(stmt.value)};`);
+        } else {
+          declare(stmt.name);
+          out.push(`${I}let ${stmt.name} = ${emitExpr(stmt.value)};`);
+        }
         break;
       case "multi-assign":
-        for (const p of stmt.pairs) out.push(`${I}let ${p.name} = ${emitExpr(p.value)};`);
+        for (const p of stmt.pairs) {
+          if (isDeclared(p.name)) {
+            out.push(`${I}${p.name} = ${emitExpr(p.value)};`);
+          } else {
+            declare(p.name);
+            out.push(`${I}let ${p.name} = ${emitExpr(p.value)};`);
+          }
+        }
         break;
       case "bg":
         out.push(`${I}ctx.fillStyle = ${emitColor(stmt.color)};`);

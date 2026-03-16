@@ -177,6 +177,24 @@ export function tokenize(source: string): Token[] {
         continue;
       }
 
+      // Color variable reference: $varname (optionally followed by .NN alpha)
+      if (ch === "$" && /[a-zA-Z_]/.test(text[pos + 1] ?? "")) {
+        let end = pos + 1;
+        while (end < text.length && /[a-zA-Z0-9_]/.test(text[end]!)) end++;
+        const varName = text.slice(pos + 1, end);
+        tokens.push({ kind: "color-ref", value: varName, line, col });
+        pos = end;
+        // Alpha shorthand: $star.08
+        if (text[pos] === "." && /\d/.test(text[pos + 1] ?? "")) {
+          let ae = pos + 1;
+          while (ae < text.length && /[\d.]/.test(text[ae]!)) ae++;
+          tokens.push({ kind: "op", value: ".", line, col: pos + 1 });
+          tokens.push({ kind: "number", value: text.slice(pos + 1, ae), line, col: pos + 2 });
+          pos = ae;
+        }
+        continue;
+      }
+
       // Identifier or keyword
       if (/[a-zA-Z_]/.test(ch)) {
         let end = pos;

@@ -4,6 +4,7 @@ export type TokenKind =
   | "number"      // 42, 3.14, -1
   | "string"      // "hello"
   | "color"       // #f00, #ff0000
+  | "color-ref"   // $varname — color variable reference (with optional .NN alpha)
   | "op"          // + - * / % ** = == != < > <= >= ? : , . .. => ->
   | "lparen"      // (
   | "rparen"      // )
