@@ -18,6 +18,7 @@ export type Expr =
   | Index
   | Prop
   | ArrayLit
+  | ObjectLit
   | Gradient
   | Lambda;
 
@@ -82,6 +83,13 @@ export interface ArrayLit {
   loc: Loc;
 }
 
+/** Object literal: `{key: value, key2: value2}`. */
+export interface ObjectLit {
+  kind: "object";
+  entries: Array<{ key: string; value: Expr }>;
+  loc: Loc;
+}
+
 /** Gradient: `linear(c1, c2)`, `radial(c1, c2, cx:N cy:N)`. */
 export interface Gradient {
   kind: "gradient";
@@ -117,6 +125,7 @@ export type Stmt =
   | BgCmd
   | BlockStmt
   | UseStmt
+  | UseComponentStmt
   | SeedStmt
   | ReturnStmt
   | PrintStmt
@@ -188,6 +197,13 @@ export type BlockHeader =
 export interface UseStmt {
   kind: "use";
   lib: "easing" | "shapes" | "palettes";
+  loc: Loc;
+}
+
+/** `use "component-name"` — external component reference. */
+export interface UseComponentStmt {
+  kind: "use-component";
+  name: string;
   loc: Loc;
 }
 

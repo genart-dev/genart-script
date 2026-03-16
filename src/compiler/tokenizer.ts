@@ -162,6 +162,8 @@ export function tokenize(source: string): Token[] {
       if (ch === ")") { tokens.push({ kind: "rparen", value: ")", line, col }); pos++; continue; }
       if (ch === "[") { tokens.push({ kind: "lbracket", value: "[", line, col }); pos++; continue; }
       if (ch === "]") { tokens.push({ kind: "rbracket", value: "]", line, col }); pos++; continue; }
+      if (ch === "{") { tokens.push({ kind: "lbrace", value: "{", line, col }); pos++; continue; }
+      if (ch === "}") { tokens.push({ kind: "rbrace", value: "}", line, col }); pos++; continue; }
 
       // Single-char operators
       if ("+-*/%=<>?:,.|!".includes(ch)) {

@@ -575,3 +575,79 @@ describe("compile — post quality + renderCtx", () => {
     expect(r.code).toContain('distort("noise", 5, "fast")');
   });
 });
+
+describe("compile — use component declarations", () => {
+  it("use with string extracts component name", () => {
+    const r = compile('use "bristle-stroke-renderer"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.components).toEqual(["bristle-stroke-renderer"]);
+  });
+
+  it("multiple use component declarations", () => {
+    const r = compile('use "bristle-stroke-renderer"\nuse "curl-flow-field"\nuse "grid-placement"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.components).toEqual(["bristle-stroke-renderer", "curl-flow-field", "grid-placement"]);
+  });
+
+  it("use component does not emit code", () => {
+    const r = compile('use "math"\nbg black');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).not.toContain("math");
+    expect(r.code).toContain("ctx.fillStyle");
+  });
+
+  it("use component coexists with use lib", () => {
+    const r = compile('use easing\nuse "bristle-stroke-renderer"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("const ease_in =");
+    expect(r.components).toEqual(["bristle-stroke-renderer"]);
+  });
+
+  it("empty components array when no use component declarations", () => {
+    const r = compile("bg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.components).toEqual([]);
+  });
+});
+
+describe("compile — object literals", () => {
+  it("object literal in function call", () => {
+    const r = compile("x = foo({width: 100, height: 200})");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("foo(({width: 100, height: 200}))");
+  });
+
+  it("object literal with expression values", () => {
+    const r = compile("x = bar({a: 1 + 2, b: sin(t)})");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("({a: (1 + 2), b: sin(t)})");
+  });
+
+  it("nested object literal", () => {
+    const r = compile("x = baz({outer: {inner: 42}})");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("({outer: ({inner: 42})})");
+  });
+
+  it("empty object literal", () => {
+    const r = compile("x = foo({})");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("foo(({}))")
+  });
+
+  it("object literal with variable references", () => {
+    const r = compile("x = create({seed: 42, width: w, height: h})");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("({seed: 42, width: w, height: h})");
+  });
+});

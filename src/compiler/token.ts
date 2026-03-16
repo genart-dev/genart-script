@@ -10,6 +10,8 @@ export type TokenKind =
   | "rparen"      // )
   | "lbracket"    // [
   | "rbracket"    // ]
+  | "lbrace"      // {
+  | "rbrace"      // }
   | "newline"     // \n (significant)
   | "indent"      // increased indentation level
   | "dedent"      // decreased indentation level

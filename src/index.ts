@@ -51,6 +51,8 @@ export interface CompileSuccess {
   colors: ColorExtract[];
   /** Layers extracted from `layer` declarations. */
   layers: LayerExtract[];
+  /** Component names extracted from `use "component-name"` declarations. */
+  components: string[];
 }
 
 /** Failed compilation result. */

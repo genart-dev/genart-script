@@ -2,9 +2,9 @@ import type { Token } from "./token";
 import type {
   Program, TopLevel, Stmt, Expr, BlockHeader, NamedArg,
   DrawCmd, BlockStmt, ParamDecl, ColorDecl, LayerDecl, Assign, MultiAssign,
-  BgCmd, UseStmt, SeedStmt, ReturnStmt, PrintStmt, WatchStmt,
+  BgCmd, UseStmt, UseComponentStmt, SeedStmt, ReturnStmt, PrintStmt, WatchStmt,
   ExprStmt, Loc, NumberLit, StringLit, ColorLit, Ident,
-  BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit, Gradient, Lambda,
+  BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit, ObjectLit, Gradient, Lambda,
 } from "./ast";
 
 const DRAW_CMDS = new Set(["circle", "rect", "line", "dot", "poly", "path", "arc", "draw", "text"]);
@@ -82,12 +82,18 @@ export function parse(tokens: Token[]): Program {
       // layer declaration
       if (name === "layer") return [parseLayerDecl() as unknown as Stmt];
 
-      // use easing|shapes|palettes
+      // use easing|shapes|palettes  OR  use "component-name"
       if (name === "use") {
         pos++;
+        const l = { line: t.line, col: t.col };
+        if (check("string")) {
+          const componentName = eat("string").value;
+          eatNewline();
+          return [{ kind: "use-component", name: componentName, loc: l } as UseComponentStmt];
+        }
         const lib = eat("ident").value as UseStmt["lib"];
         eatNewline();
-        return [{ kind: "use", lib, loc: { line: t.line, col: t.col } }];
+        return [{ kind: "use", lib, loc: l }];
       }
 
       // seed
@@ -567,6 +573,20 @@ export function parse(tokens: Token[]): Program {
       }
       eat("rbracket");
       return { kind: "array", elements, loc: l };
+    }
+
+    if (t.kind === "lbrace") {
+      eat("lbrace");
+      const entries: Array<{ key: string; value: Expr }> = [];
+      while (!check("rbrace") && !check("eof")) {
+        const key = eat("ident").value;
+        eat("op", ":");
+        const value = parseExpr();
+        entries.push({ key, value });
+        if (check("op", ",")) eat("op", ",");
+      }
+      eat("rbrace");
+      return { kind: "object", entries, loc: l } as ObjectLit;
     }
 
     if (t.kind === "ident") {

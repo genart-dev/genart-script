@@ -1,8 +1,8 @@
 import type {
   Program, TopLevel, Stmt, Expr, BlockHeader, NamedArg,
   DrawCmd, BlockStmt, ParamDecl, ColorDecl, LayerDecl, Assign, MultiAssign,
-  BgCmd, UseStmt, SeedStmt, ReturnStmt, PrintStmt, WatchStmt,
-  ExprStmt, BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit,
+  BgCmd, UseStmt, UseComponentStmt, SeedStmt, ReturnStmt, PrintStmt, WatchStmt,
+  ExprStmt, BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit, ObjectLit,
   Gradient, Lambda, NumberLit, StringLit, ColorLit, Ident,
 } from "./ast";
 import type { CompileResult, ParamExtract, ColorExtract, LayerExtract } from "../index";
@@ -14,6 +14,7 @@ export function codegen(program: Program): CompileResult {
   const params: ParamExtract[] = [];
   const colors: ColorExtract[] = [];
   const layers: LayerExtract[] = [];
+  const components: string[] = [];
   const usedLibs = new Set<string>();
   const errors: Array<{ line: number; col: number; message: string }> = [];
 
@@ -27,6 +28,8 @@ export function codegen(program: Program): CompileResult {
       layers.push(extractLayer(node));
     } else if (node.kind === "use") {
       usedLibs.add(node.lib);
+    } else if (node.kind === "use-component") {
+      components.push(node.name);
     }
   }
 
@@ -78,7 +81,7 @@ export function codegen(program: Program): CompileResult {
     if (node.kind === "block" && node.header.type === "frame") { frameBlock = node; continue; }
     if (node.kind === "block" && node.header.type === "post") { postBlock = node; continue; }
     if (node.kind === "block" && node.header.type === "fn") { fnDecls.push(node); continue; }
-    if (node.kind === "param" || node.kind === "color-decl" || node.kind === "layer" || node.kind === "use") continue;
+    if (node.kind === "param" || node.kind === "color-decl" || node.kind === "layer" || node.kind === "use" || node.kind === "use-component") continue;
     staticStmts.push(node as Stmt);
   }
 
@@ -141,7 +144,7 @@ export function codegen(program: Program): CompileResult {
   const code = lines.join("\n");
 
   if (errors.length) return { ok: false, errors };
-  return { ok: true, code, params, colors, layers };
+  return { ok: true, code, params, colors, layers, components };
 
   // ---------------------------------------------------------------------------
   // Emit helpers
@@ -185,6 +188,7 @@ export function codegen(program: Program): CompileResult {
         emitBlock(stmt, out, d);
         break;
       case "use":
+      case "use-component":
         // already handled at top level
         break;
       case "seed": {
@@ -461,6 +465,7 @@ export function codegen(program: Program): CompileResult {
       case "prop": return containsIt(expr.object);
       case "index": return containsIt(expr.object) || containsIt(expr.index);
       case "array": return expr.elements.some(containsIt);
+      case "object": return expr.entries.some(e => containsIt(e.value));
       case "lambda": return false; // `it` inside explicit lambda is scoped
       default: return false;
     }
@@ -493,6 +498,7 @@ export function codegen(program: Program): CompileResult {
         return `${emitExpr(expr.object)}.${expr.prop === "each" ? "forEach" : expr.prop}`;
       case "index": return `${emitExpr(expr.object)}[${emitExpr(expr.index)}]`;
       case "array": return `[${expr.elements.map(emitExpr).join(", ")}]`;
+      case "object": return `({${expr.entries.map(e => `${e.key}: ${emitExpr(e.value)}`).join(", ")}})`;
       case "lambda": {
         const params = expr.params.length === 1 && expr.params[0] === "it" ? ["it"] : expr.params;
         return `(${params.join(", ")}) => ${emitExpr(expr.body)}`;
