@@ -10,6 +10,7 @@ import { noise1, noise2, noise3, noiseSeed } from "./noise";
 import { colorAlpha, linearGradient, radialGradient } from "./color";
 import { PI, TWO_PI, HALF_PI, lerp, clamp, map, dist, range, sin, cos, tan, atan2, sqrt, abs, floor, ceil, round, min, max, pow, log, exp } from "./math";
 import { makeEffects } from "./effects";
+import type { RenderCtxRef } from "./effects";
 
 export { PRNG, defaultPRNG };
 export { noise1, noise2, noise3, noiseSeed };
@@ -28,7 +29,12 @@ export function buildGlobals(
 ): RuntimeGlobals {
   defaultPRNG.seed(null, seed);
 
+  // Shared render-context ref — `__post__` sets `.value` at call time.
+  // Effects read it to choose quality path. Exposed as `__renderCtx__` global.
+  const __renderCtx__: RenderCtxRef = { value: "static" };
+
   return {
+    __renderCtx__,
     // Canvas context helpers
     __ctx__: ctx,
     w: ctx.canvas.width,
@@ -83,7 +89,7 @@ export function buildGlobals(
     // Post-processing effects — available anywhere, designed for `post:` blocks.
     // Derive logical dimensions from the canvas transform (adapter calls ctx.scale(density, density)
     // before buildGlobals, so transform.a == density). Falls back to physical size at density=1.
-    ...makeEffects(ctx, Math.round(ctx.canvas.width / (ctx.getTransform().a || 1)), Math.round(ctx.canvas.height / (ctx.getTransform().d || 1))),
+    ...makeEffects(ctx, Math.round(ctx.canvas.width / (ctx.getTransform().a || 1)), Math.round(ctx.canvas.height / (ctx.getTransform().d || 1)), __renderCtx__),
 
     // Image loading — synchronous return; load starts in background.
     // `ctx.drawImage` on an unloaded image is a no-op in all browsers.
@@ -146,6 +152,7 @@ export interface Vec {
 
 export interface RuntimeGlobals {
   __ctx__: CanvasRenderingContext2D;
+  __renderCtx__: RenderCtxRef;
   w: number;
   h: number;
   __params__: Record<string, number>;
@@ -179,4 +186,8 @@ export interface RuntimeGlobals {
   scanlines: (opacity?: number) => void;
   pixelate: (blockSize: number) => void;
   bloom: (strength?: number, radius?: number) => void;
+  chromatic_aberration: (amount?: number, quality?: "auto" | "high" | "fast") => void;
+  distort: (type?: "wave" | "ripple" | "noise", amount?: number, quality?: "auto" | "high" | "fast") => void;
+  dither: (strength?: number) => void;
+  halftone: (dotSize?: number, angle?: number) => void;
 }

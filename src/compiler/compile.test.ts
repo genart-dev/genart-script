@@ -479,3 +479,99 @@ describe("compile — Phase 7 layer declarations", () => {
     expect(r.layers).toEqual([]);
   });
 });
+
+describe("compile — prev + touch globals in frame", () => {
+  it("frame signature includes touchX, touchY, touches, prev", () => {
+    const r = compile("frame:\n  circle touchX touchY r:10 fill:red");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("function __frame__(__ctx__, t, frame, w, h, fps, mouseX, mouseY, mouseDown, pmouseX, pmouseY, touchX, touchY, touches, prev)");
+  });
+
+  it("prev is accessible as identifier inside frame block", () => {
+    const r = compile("frame:\n  draw prev 0 0");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("ctx.drawImage(prev,");
+  });
+
+  it("touches is accessible as identifier inside frame block", () => {
+    const r = compile("frame:\n  n = touches.length");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("touches.length");
+  });
+
+  it("touchX and touchY are usable in expressions", () => {
+    const r = compile("frame:\n  circle touchX touchY r:5 fill:white");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("ctx.arc(touchX, touchY,");
+  });
+});
+
+describe("compile — post quality + renderCtx", () => {
+  it("post block sets __renderCtx__.value", () => {
+    const r = compile("post:\n  vignette(0.5)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("__renderCtx__.value = __renderContext__");
+  });
+
+  it("chromatic_aberration compiles in post block", () => {
+    const r = compile("post:\n  chromatic_aberration(3)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("chromatic_aberration(3)");
+  });
+
+  it("distort compiles with type and amount", () => {
+    const r = compile('post:\n  distort("wave", 10)');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('distort("wave", 10)');
+  });
+
+  it("chromatic_aberration with quality override", () => {
+    const r = compile('post:\n  chromatic_aberration(5, "high")');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('chromatic_aberration(5, "high")');
+  });
+
+  it("distort with quality override", () => {
+    const r = compile('post:\n  distort("ripple", 8, "fast")');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('distort("ripple", 8, "fast")');
+  });
+
+  it("dither compiles in post block", () => {
+    const r = compile("post:\n  dither(0.3)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("dither(0.3)");
+  });
+
+  it("halftone compiles in post block", () => {
+    const r = compile("post:\n  halftone(4, 0.3)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("halftone(4, 0.3)");
+  });
+
+  it("multiple effects with mixed quality overrides", () => {
+    const src = [
+      "post:",
+      '  chromatic_aberration(3, "high")',
+      "  vignette(0.5)",
+      '  distort("noise", 5, "fast")',
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('chromatic_aberration(3, "high")');
+    expect(r.code).toContain("vignette(0.5)");
+    expect(r.code).toContain('distort("noise", 5, "fast")');
+  });
+});

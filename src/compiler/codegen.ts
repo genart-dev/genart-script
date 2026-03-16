@@ -95,7 +95,7 @@ export function codegen(program: Program): CompileResult {
   // frame: block
   if (frameBlock) {
     lines.push(`// --- frame: ---`);
-    lines.push(`function __frame__(__ctx__, t, frame, w, h, fps, mouseX, mouseY, mouseDown, pmouseX, pmouseY) {`);
+    lines.push(`function __frame__(__ctx__, t, frame, w, h, fps, mouseX, mouseY, mouseDown, pmouseX, pmouseY, touchX, touchY, touches, prev) {`);
     lines.push(`  const ctx = __ctx__;`);
     emitBody(frameBlock.body, lines, 1);
     lines.push(`}`);
@@ -107,6 +107,7 @@ export function codegen(program: Program): CompileResult {
     lines.push(`// --- post: ---`);
     lines.push(`function __post__(__ctx__, __renderContext__) {`);
     lines.push(`  const ctx = __ctx__;`);
+    lines.push(`  __renderCtx__.value = __renderContext__;`);
     emitBody(postBlock.body, lines, 1);
     lines.push(`}`);
     lines.push(``);
