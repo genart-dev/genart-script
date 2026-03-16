@@ -235,6 +235,7 @@ export interface ExprStmt {
 export type TopLevel =
   | ParamDecl
   | ColorDecl
+  | LayerDecl
   | Stmt;
 
 /** `param name default range:min..max label:"..."` */
@@ -255,6 +256,22 @@ export interface ColorDecl {
   name: string;
   default: string;
   label?: string;
+  loc: Loc;
+}
+
+/**
+ * `layer "plugin:type" "preset" [name:"label" opacity:N blend:"mode" visible:bool]`
+ *
+ * Declares a design layer backed by a plugin layer type.
+ */
+export interface LayerDecl {
+  kind: "layer";
+  /** Plugin layer type ID, e.g. `"terrain:sky"`. */
+  type: string;
+  /** Preset name resolved by the plugin, e.g. `"noon"`. */
+  preset: string;
+  /** Optional named overrides (name, opacity, blend, visible). */
+  named: NamedArg[];
   loc: Loc;
 }
 

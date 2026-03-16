@@ -1,11 +1,11 @@
 import type {
   Program, TopLevel, Stmt, Expr, BlockHeader, NamedArg,
-  DrawCmd, BlockStmt, ParamDecl, ColorDecl, Assign, MultiAssign,
+  DrawCmd, BlockStmt, ParamDecl, ColorDecl, LayerDecl, Assign, MultiAssign,
   BgCmd, UseStmt, SeedStmt, ReturnStmt, PrintStmt, WatchStmt,
   ExprStmt, BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit,
   Gradient, Lambda, NumberLit, StringLit, ColorLit, Ident,
 } from "./ast";
-import type { CompileResult, ParamExtract, ColorExtract } from "../index";
+import type { CompileResult, ParamExtract, ColorExtract, LayerExtract } from "../index";
 import { EASING_LIB, SHAPES_LIB, PALETTES_LIB } from "./libs";
 
 const VERSION = "0.1.0";
@@ -13,15 +13,18 @@ const VERSION = "0.1.0";
 export function codegen(program: Program): CompileResult {
   const params: ParamExtract[] = [];
   const colors: ColorExtract[] = [];
+  const layers: LayerExtract[] = [];
   const usedLibs = new Set<string>();
   const errors: Array<{ line: number; col: number; message: string }> = [];
 
-  // Collect param/color declarations first
+  // Collect param/color/layer declarations first
   for (const node of program.body) {
     if (node.kind === "param") {
       params.push({ key: node.name, label: node.label ?? node.name, min: node.min, max: node.max, step: node.step, default: node.default });
     } else if (node.kind === "color-decl") {
       colors.push({ key: node.name, label: node.label ?? node.name, default: node.default });
+    } else if (node.kind === "layer") {
+      layers.push(extractLayer(node));
     } else if (node.kind === "use") {
       usedLibs.add(node.lib);
     }
@@ -59,7 +62,7 @@ export function codegen(program: Program): CompileResult {
     if (node.kind === "block" && node.header.type === "frame") { frameBlock = node; continue; }
     if (node.kind === "block" && node.header.type === "post") { postBlock = node; continue; }
     if (node.kind === "block" && node.header.type === "fn") { fnDecls.push(node); continue; }
-    if (node.kind === "param" || node.kind === "color-decl" || node.kind === "use") continue;
+    if (node.kind === "param" || node.kind === "color-decl" || node.kind === "layer" || node.kind === "use") continue;
     staticStmts.push(node as Stmt);
   }
 
@@ -121,7 +124,7 @@ export function codegen(program: Program): CompileResult {
   const code = lines.join("\n");
 
   if (errors.length) return { ok: false, errors };
-  return { ok: true, code, params, colors };
+  return { ok: true, code, params, colors, layers };
 
   // ---------------------------------------------------------------------------
   // Emit helpers
@@ -479,6 +482,27 @@ export function codegen(program: Program): CompileResult {
     }
     // Variable that holds a color string
     return emitExpr(expr);
+  }
+
+  function extractLayer(node: LayerDecl): LayerExtract {
+    const extract: LayerExtract = { type: node.type, preset: node.preset };
+    for (const arg of node.named) {
+      switch (arg.name) {
+        case "name":
+          extract.name = (arg.value as StringLit).value;
+          break;
+        case "opacity":
+          extract.opacity = (arg.value as NumberLit).value;
+          break;
+        case "blend":
+          extract.blend = (arg.value as StringLit).value;
+          break;
+        case "visible":
+          extract.visible = arg.value.kind === "ident" && (arg.value as Ident).name === "true";
+          break;
+      }
+    }
+    return extract;
   }
 
   function emitGradient(g: Gradient): string {

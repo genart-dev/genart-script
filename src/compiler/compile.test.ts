@@ -392,3 +392,90 @@ describe("compile — Phase 6 post-processing", () => {
     expect(r.code).toContain("blur(2)");
   });
 });
+
+describe("compile — Phase 7 layer declarations", () => {
+  it("basic layer declaration extracts type and preset", () => {
+    const r = compile('layer "terrain:sky" "noon"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.layers).toHaveLength(1);
+    expect(r.layers[0]).toEqual({ type: "terrain:sky", preset: "noon" });
+  });
+
+  it("layer with name override", () => {
+    const r = compile('layer "terrain:sky" "noon" name:"My Sky"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.layers[0]!.name).toBe("My Sky");
+  });
+
+  it("layer with opacity and blend", () => {
+    const r = compile('layer "terrain:mountains" "alpine" opacity:0.8 blend:"multiply"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.layers[0]!.opacity).toBe(0.8);
+    expect(r.layers[0]!.blend).toBe("multiply");
+  });
+
+  it("layer with visible:false", () => {
+    const r = compile('layer "terrain:sky" "dusk" visible:false');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.layers[0]!.visible).toBe(false);
+  });
+
+  it("multiple layers maintain order", () => {
+    const r = compile('layer "terrain:sky" "noon"\nlayer "terrain:mountains" "alpine"\nlayer "terrain:water" "lake"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.layers).toHaveLength(3);
+    expect(r.layers[0]!.type).toBe("terrain:sky");
+    expect(r.layers[1]!.type).toBe("terrain:mountains");
+    expect(r.layers[2]!.type).toBe("terrain:water");
+  });
+
+  it("layer declarations do not emit code", () => {
+    const r = compile('layer "terrain:sky" "noon"\nbg black');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).not.toContain("terrain");
+    expect(r.code).not.toContain("noon");
+    expect(r.code).toContain("ctx.fillStyle");
+  });
+
+  it("layers coexist with params and colors", () => {
+    const src = [
+      'param brightness 0.5 range:0..1 step:0.01',
+      'color sky #87CEEB',
+      'layer "terrain:sky" "noon"',
+      'bg sky',
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params).toHaveLength(1);
+    expect(r.colors).toHaveLength(1);
+    expect(r.layers).toHaveLength(1);
+    expect(r.layers[0]!.type).toBe("terrain:sky");
+  });
+
+  it("layer with all named args", () => {
+    const r = compile('layer "particles:glow" "fireflies" name:"Firefly Glow" opacity:0.6 blend:"screen" visible:true');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const l = r.layers[0]!;
+    expect(l.type).toBe("particles:glow");
+    expect(l.preset).toBe("fireflies");
+    expect(l.name).toBe("Firefly Glow");
+    expect(l.opacity).toBe(0.6);
+    expect(l.blend).toBe("screen");
+    expect(l.visible).toBe(true);
+  });
+
+  it("empty layers array when no layer declarations", () => {
+    const r = compile("bg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.layers).toEqual([]);
+  });
+});

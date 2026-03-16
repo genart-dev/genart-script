@@ -22,6 +22,22 @@ export interface ColorExtract {
   default: string;
 }
 
+/** A layer extracted from source at compile time (maps to DesignLayer). */
+export interface LayerExtract {
+  /** Plugin layer type ID, e.g. `"terrain:sky"`. */
+  type: string;
+  /** Preset name resolved by the plugin, e.g. `"noon"`. */
+  preset: string;
+  /** Display name override. */
+  name?: string;
+  /** Layer opacity 0–1. */
+  opacity?: number;
+  /** Blend mode string. */
+  blend?: string;
+  /** Layer visibility. */
+  visible?: boolean;
+}
+
 /** Successful compilation result. */
 export interface CompileSuccess {
   ok: true;
@@ -31,6 +47,8 @@ export interface CompileSuccess {
   params: ParamExtract[];
   /** Colors extracted from `color` declarations. */
   colors: ColorExtract[];
+  /** Layers extracted from `layer` declarations. */
+  layers: LayerExtract[];
 }
 
 /** Failed compilation result. */

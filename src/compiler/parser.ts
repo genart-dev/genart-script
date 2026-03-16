@@ -1,7 +1,7 @@
 import type { Token } from "./token";
 import type {
   Program, TopLevel, Stmt, Expr, BlockHeader, NamedArg,
-  DrawCmd, BlockStmt, ParamDecl, ColorDecl, Assign, MultiAssign,
+  DrawCmd, BlockStmt, ParamDecl, ColorDecl, LayerDecl, Assign, MultiAssign,
   BgCmd, UseStmt, SeedStmt, ReturnStmt, PrintStmt, WatchStmt,
   ExprStmt, Loc, NumberLit, StringLit, ColorLit, Ident,
   BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit, Gradient, Lambda,
@@ -79,6 +79,8 @@ export function parse(tokens: Token[]): Program {
       if (name === "param") return [parseParamDecl() as unknown as Stmt];
       // color declaration
       if (name === "color" && peek(1).kind === "ident") return [parseColorDecl() as unknown as Stmt];
+      // layer declaration
+      if (name === "layer") return [parseLayerDecl() as unknown as Stmt];
 
       // use easing|shapes|palettes
       if (name === "use") {
@@ -208,6 +210,27 @@ export function parse(tokens: Token[]): Program {
     }
     eatNewline();
     return { kind: "color-decl", name, default: defColor, label, loc: l };
+  }
+
+  function parseLayerDecl(): LayerDecl {
+    const l = loc();
+    eat("ident", "layer");
+    const type = eat("string").value;
+    const preset = eat("string").value;
+    const named: NamedArg[] = [];
+    while (!check("newline") && !check("eof") && !check("dedent")) {
+      if (cur().kind === "ident" && peek(1).kind === "op" && peek(1).value === ":") {
+        const argLoc = loc();
+        const key = eat("ident").value;
+        eat("op", ":");
+        const val = parseSimpleExpr();
+        named.push({ name: key, value: val, loc: argLoc });
+      } else {
+        break;
+      }
+    }
+    eatNewline();
+    return { kind: "layer", type, preset, named, loc: l };
   }
 
   // ---------------------------------------------------------------------------
@@ -584,6 +607,7 @@ export function parse(tokens: Token[]): Program {
 
     if (t.kind === "ident" && t.value === "param") return [parseParamDecl()];
     if (t.kind === "ident" && t.value === "color" && peek(1).kind === "ident") return [parseColorDecl()];
+    if (t.kind === "ident" && t.value === "layer") return [parseLayerDecl()];
 
     return parseStmt() as unknown as TopLevel[];
   }
