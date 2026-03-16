@@ -32,6 +32,8 @@ export interface LayerExtract {
   name?: string;
   /** Layer opacity 0–1. */
   opacity?: number;
+  /** Param name that drives opacity at runtime (e.g. `opacity:fog` → `"fog"`). */
+  opacityParam?: string;
   /** Blend mode string. */
   blend?: string;
   /** Layer visibility. */

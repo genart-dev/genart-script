@@ -521,7 +521,15 @@ export function codegen(program: Program): CompileResult {
           extract.name = (arg.value as StringLit).value;
           break;
         case "opacity":
-          extract.opacity = (arg.value as NumberLit).value;
+          if (arg.value.kind === "number") {
+            extract.opacity = (arg.value as NumberLit).value;
+          } else if (arg.value.kind === "ident") {
+            // Param reference — store the param name for runtime resolution
+            extract.opacityParam = (arg.value as Ident).name;
+            // Use the param's default value as the initial opacity
+            const paramDef = params.find(p => p.key === (arg.value as Ident).name);
+            extract.opacity = paramDef ? paramDef.default : 1;
+          }
           break;
         case "blend":
           extract.blend = (arg.value as StringLit).value;
