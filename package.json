@@ -1,6 +1,6 @@
 {
   "name": "@genart-dev/genart-script",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Compiler and runtime for the GenArt Script language (.genart-script / .gs)",
   "type": "module",
   "exports": {
@@ -28,7 +28,9 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "license": "MIT",
   "author": {
     "name": "genart.dev",
@@ -39,7 +41,9 @@
     "type": "git",
     "url": "git+https://github.com/genart-dev/genart-script.git"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup",
     "postbuild": "node -e \"const fs=require('fs'); ['dist/index.d.ts','dist/runtime.d.ts'].forEach(f=>{if(!fs.existsSync(f)){console.error('ERROR: '+f+' missing');process.exit(1)}});console.log('Verified: DTS files present')\"",

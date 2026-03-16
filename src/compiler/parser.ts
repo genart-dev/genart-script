@@ -154,6 +154,12 @@ export function parse(tokens: Token[]): Program {
         return [parseBlockStmt()];
       }
 
+      // `let x = expr` — skip the `let` keyword, parse as normal assignment
+      if (name === "let" && peek(1).kind === "ident" && peek(2).kind === "op" && peek(2).value === "=") {
+        pos++; // skip `let`
+        return [parseAssign()];
+      }
+
       // multi-assign: `x = 1, y = 2`
       if (peek(1).kind === "op" && peek(1).value === "=" && peek(2).kind !== undefined) {
         // Check for multi-assign pattern (comma after first rhs)
@@ -280,10 +286,10 @@ export function parse(tokens: Token[]): Program {
         const argLoc = loc();
         const key = eat("ident").value;
         eat("op", ":");
-        const val = parseSimpleExpr(); // no comma ambiguity
+        const val = parseSimpleExpr(); // full expression for named arg values
         named.push({ name: key, value: val, loc: argLoc });
       } else {
-        positional.push(parseSimpleExpr());
+        positional.push(parseDrawArg());
       }
     }
 
@@ -639,12 +645,22 @@ export function parse(tokens: Token[]): Program {
 
   /**
    * Simple expression — stops before named-arg colons.
-   * Used in draw commands and block headers to avoid consuming `fill:`.
+   * Used in block headers to avoid consuming `fill:`.
    */
   function parseSimpleExpr(): Expr {
-    // Same as parseExpr but we stop when we see ident:
-    // We achieve this by checking if the result is followed by ident + colon
     return parseTernary();
+  }
+
+  /**
+   * Draw-command positional arg — like a full expression but `-` is NOT
+   * consumed as binary subtraction at the top level. This makes
+   * `rect -25 -25` parse as two positional args instead of `(-25) - (-25)`.
+   * Other binary ops (/, *, +, %, **) still work: `circle w/2 h/2 r:100`.
+   * For subtraction, wrap in parens: `rect (x - 5) (y - 10)`.
+   */
+  function parseDrawArg(): Expr {
+    // Use parseAdd variant that only allows `+` (not `-`)
+    return parseBinary(parseMul, ["+"]);
   }
 
   // ---------------------------------------------------------------------------

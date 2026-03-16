@@ -681,3 +681,47 @@ describe("compile — bracket indexing", () => {
     expect(r.code).toContain("grid[i][j]");
   });
 });
+
+describe("compile — bug fixes", () => {
+  it("let keyword parses as assignment, no bare let; (bug fix)", () => {
+    const r = compile("let margin = 40\nlet x = margin + 10");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("let margin = 40;");
+    expect(r.code).toContain("let x = (margin + 10);");
+    expect(r.code).not.toContain("let;");
+  });
+
+  it("let keyword with expression rhs", () => {
+    const r = compile("let total = (w / 2) + 10");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("let total = ((w / 2) + 10);");
+    expect(r.code).not.toContain("let;");
+  });
+
+  it("negative literals in draw command positional args (bug fix)", () => {
+    const r = compile("rect -25 -25 w:50 h:50");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Should have two negative positional args, not a subtraction
+    expect(r.code).toContain("(-25)");
+    expect(r.code).toContain("50");
+  });
+
+  it("draw command still allows division in positional args", () => {
+    const r = compile("circle w/2 h/2 r:100 fill:coral");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("(w / 2)");
+    expect(r.code).toContain("(h / 2)");
+  });
+
+  it("draw command allows addition in positional args", () => {
+    const r = compile("circle x+10 y+20 r:50");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("(x + 10)");
+    expect(r.code).toContain("(y + 20)");
+  });
+});
