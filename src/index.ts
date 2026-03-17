@@ -13,6 +13,16 @@ export interface ParamExtract {
   max: number;
   step: number;
   default: number;
+  /** Tab ID this param belongs to (maps to TabExtract.id / ParamDef.tab). */
+  tab?: string;
+}
+
+/** A tab extracted from source at compile time (maps to TabDef). */
+export interface TabExtract {
+  /** Unique tab ID (slugified from group name). */
+  id: string;
+  /** Display label (original group name). */
+  label: string;
 }
 
 /** A color extracted from source at compile time (maps to ColorDef). */
@@ -47,6 +57,8 @@ export interface CompileSuccess {
   code: string;
   /** Params extracted from `param` declarations. */
   params: ParamExtract[];
+  /** Tabs extracted from `group` directives (in declaration order, deduplicated). */
+  tabs: TabExtract[];
   /** Colors extracted from `color` declarations. */
   colors: ColorExtract[];
   /** Layers extracted from `layer` declarations. */

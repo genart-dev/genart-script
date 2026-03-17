@@ -254,7 +254,7 @@ export type TopLevel =
   | LayerDecl
   | Stmt;
 
-/** `param name default range:min..max label:"..."` */
+/** `param name default range:min..max label:"..." group:"..."` */
 export interface ParamDecl {
   kind: "param";
   name: string;
@@ -263,6 +263,7 @@ export interface ParamDecl {
   max: number;
   step: number;
   label?: string;
+  group?: string;
   loc: Loc;
 }
 

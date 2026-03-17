@@ -615,6 +615,91 @@ describe("compile — use component declarations", () => {
   });
 });
 
+describe("compile — param group tabs", () => {
+  it("inline group on param extracts tab", () => {
+    const r = compile('param size 10 range:1..50 group:"Style"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params[0]!.tab).toBe("style");
+    expect(r.tabs).toEqual([{ id: "style", label: "Style" }]);
+  });
+
+  it("group directive sets group for subsequent params", () => {
+    const src = [
+      'group "Sky"',
+      "param skyWidth 19 range:4..40 step:1",
+      "param skyBristles 6 range:3..12 step:1",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params).toHaveLength(2);
+    expect(r.params[0]!.tab).toBe("sky");
+    expect(r.params[1]!.tab).toBe("sky");
+    expect(r.tabs).toEqual([{ id: "sky", label: "Sky" }]);
+  });
+
+  it("multiple group directives create multiple tabs", () => {
+    const src = [
+      "param global 1 range:0..2",
+      'group "Sky"',
+      "param skyW 19 range:4..40",
+      'group "Water"',
+      "param waterW 12 range:4..30",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params[0]!.tab).toBeUndefined(); // ungrouped
+    expect(r.params[1]!.tab).toBe("sky");
+    expect(r.params[2]!.tab).toBe("water");
+    expect(r.tabs).toEqual([
+      { id: "sky", label: "Sky" },
+      { id: "water", label: "Water" },
+    ]);
+  });
+
+  it("inline group overrides directive group", () => {
+    const src = [
+      'group "Sky"',
+      'param special 5 range:1..10 group:"Water"',
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params[0]!.tab).toBe("water");
+    expect(r.tabs).toEqual([{ id: "water", label: "Water" }]);
+  });
+
+  it("tabs are deduplicated", () => {
+    const src = [
+      'param a 1 range:0..2 group:"Style"',
+      'param b 2 range:0..4 group:"Style"',
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.tabs).toHaveLength(1);
+    expect(r.tabs[0]).toEqual({ id: "style", label: "Style" });
+  });
+
+  it("empty tabs when no groups", () => {
+    const r = compile("param x 5 range:0..10");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.tabs).toEqual([]);
+    expect(r.params[0]!.tab).toBeUndefined();
+  });
+
+  it("group with multi-word name slugifies correctly", () => {
+    const r = compile('param x 5 range:0..10 group:"Lightning Bolts"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params[0]!.tab).toBe("lightning-bolts");
+    expect(r.tabs[0]!.label).toBe("Lightning Bolts");
+  });
+});
+
 describe("compile — object literals", () => {
   it("object literal in function call", () => {
     const r = compile("x = foo({width: 100, height: 200})");

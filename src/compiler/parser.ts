@@ -181,7 +181,7 @@ export function parse(tokens: Token[]): Program {
     eat("ident", "param");
     const name = eat("ident").value;
     const def = parseExpr(); // default value
-    let min = 0, max = 100, step = 1, label: string | undefined;
+    let min = 0, max = 100, step = 1, label: string | undefined, group: string | undefined;
     while (!check("newline") && !check("eof") && !check("dedent")) {
       const key = eat("ident").value;
       eat("op", ":");
@@ -200,10 +200,12 @@ export function parse(tokens: Token[]): Program {
         step = (parseExpr() as NumberLit).value;
       } else if (key === "label") {
         label = eat("string").value;
+      } else if (key === "group") {
+        group = eat("string").value;
       }
     }
     eatNewline();
-    return { kind: "param", name, default: (def as NumberLit).value, min, max, step, label, loc: l };
+    return { kind: "param", name, default: (def as NumberLit).value, min, max, step, label, group, loc: l };
   }
 
   function parseColorDecl(): ColorDecl {
@@ -677,11 +679,31 @@ export function parse(tokens: Token[]): Program {
     return parseStmt() as unknown as TopLevel[];
   }
 
+  /** Current group set by `group "label"` directives. Applied to subsequent params. */
+  let currentGroup: string | undefined;
+
   const body: TopLevel[] = [];
   while (!check("eof")) {
     skipNewlines();
     if (check("eof")) break;
-    body.push(...parseTopLevel());
+
+    // `group "label"` directive — sets group for subsequent params
+    if (cur().kind === "ident" && cur().value === "group" && peek(1).kind === "string") {
+      pos++; // skip `group`
+      const groupName = eat("string").value;
+      currentGroup = groupName || undefined;
+      eatNewline();
+      continue;
+    }
+
+    const nodes = parseTopLevel();
+    // Apply current group to param declarations that don't have an inline group
+    for (const node of nodes) {
+      if (node.kind === "param" && node.group === undefined && currentGroup !== undefined) {
+        (node as ParamDecl).group = currentGroup;
+      }
+    }
+    body.push(...nodes);
   }
 
   return { body };

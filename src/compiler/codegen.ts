@@ -5,23 +5,39 @@ import type {
   ExprStmt, BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit, ObjectLit,
   Gradient, Lambda, NumberLit, StringLit, ColorLit, Ident,
 } from "./ast";
-import type { CompileResult, ParamExtract, ColorExtract, LayerExtract } from "../index";
+import type { CompileResult, ParamExtract, TabExtract, ColorExtract, LayerExtract } from "../index";
 import { EASING_LIB, SHAPES_LIB, PALETTES_LIB } from "./libs";
 
 const VERSION = "0.1.0";
 
 export function codegen(program: Program): CompileResult {
   const params: ParamExtract[] = [];
+  const tabs: TabExtract[] = [];
+  const seenTabs = new Set<string>();
   const colors: ColorExtract[] = [];
   const layers: LayerExtract[] = [];
   const components: string[] = [];
   const usedLibs = new Set<string>();
   const errors: Array<{ line: number; col: number; message: string }> = [];
 
+  /** Slugify a group name into a tab ID: "Lightning Bolts" → "lightning-bolts". */
+  function slugify(name: string): string {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  }
+
   // Collect param/color/layer declarations first
   for (const node of program.body) {
     if (node.kind === "param") {
-      params.push({ key: node.name, label: node.label ?? node.name, min: node.min, max: node.max, step: node.step, default: node.default });
+      const extract: ParamExtract = { key: node.name, label: node.label ?? node.name, min: node.min, max: node.max, step: node.step, default: node.default };
+      if (node.group) {
+        const tabId = slugify(node.group);
+        extract.tab = tabId;
+        if (!seenTabs.has(tabId)) {
+          seenTabs.add(tabId);
+          tabs.push({ id: tabId, label: node.group });
+        }
+      }
+      params.push(extract);
     } else if (node.kind === "color-decl") {
       colors.push({ key: node.name, label: node.label ?? node.name, default: node.default });
     } else if (node.kind === "layer") {
@@ -144,7 +160,7 @@ export function codegen(program: Program): CompileResult {
   const code = lines.join("\n");
 
   if (errors.length) return { ok: false, errors };
-  return { ok: true, code, params, colors, layers, components };
+  return { ok: true, code, params, tabs, colors, layers, components };
 
   // ---------------------------------------------------------------------------
   // Emit helpers
