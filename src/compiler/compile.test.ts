@@ -810,3 +810,390 @@ describe("compile — bug fixes", () => {
     expect(r.code).toContain("(y + 20)");
   });
 });
+
+describe("compile — bare identifiers (v2)", () => {
+  // use directive
+  it("use bare component name with hyphens", () => {
+    const r = compile("use bristle-stroke-renderer");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.components).toEqual(["bristle-stroke-renderer"]);
+  });
+
+  it("use bare single-word component", () => {
+    const r = compile("use math");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.components).toEqual(["math"]);
+  });
+
+  it("use bare component coexists with use lib", () => {
+    const r = compile("use easing\nuse bristle-stroke-renderer");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("const ease_in =");
+    expect(r.components).toEqual(["bristle-stroke-renderer"]);
+  });
+
+  it("use quoted string still works (backward compat)", () => {
+    const r = compile('use "bristle-stroke-renderer"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.components).toEqual(["bristle-stroke-renderer"]);
+  });
+
+  it("use lib names still work as libs", () => {
+    const r = compile("use easing");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("const ease_in =");
+    expect(r.components).toEqual([]);
+  });
+
+  // layer directive
+  it("layer with bare type and preset", () => {
+    const r = compile("layer terrain:sky dusk");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.layers).toHaveLength(1);
+    expect(r.layers[0]).toEqual({ type: "terrain:sky", preset: "dusk" });
+  });
+
+  it("layer with bare type and preset plus named args", () => {
+    const r = compile('layer terrain:mountains alpine name:"My Mountains" opacity:0.8');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.layers[0]!.type).toBe("terrain:mountains");
+    expect(r.layers[0]!.preset).toBe("alpine");
+    expect(r.layers[0]!.name).toBe("My Mountains");
+    expect(r.layers[0]!.opacity).toBe(0.8);
+  });
+
+  it("layer with quoted strings still works (backward compat)", () => {
+    const r = compile('layer "terrain:sky" "noon"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.layers[0]!.type).toBe("terrain:sky");
+    expect(r.layers[0]!.preset).toBe("noon");
+  });
+
+  it("layer with hyphenated preset", () => {
+    const r = compile("layer particles:glow warm-evening");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.layers[0]!.type).toBe("particles:glow");
+    expect(r.layers[0]!.preset).toBe("warm-evening");
+  });
+
+  it("multiple bare layers maintain order", () => {
+    const r = compile("layer terrain:sky noon\nlayer terrain:mountains alpine\nlayer terrain:water lake");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.layers).toHaveLength(3);
+    expect(r.layers[0]!.type).toBe("terrain:sky");
+    expect(r.layers[1]!.type).toBe("terrain:mountains");
+    expect(r.layers[2]!.type).toBe("terrain:water");
+  });
+
+  // group directive
+  it("group with bare identifier", () => {
+    const src = ["group Sky", "param skyW 19 range:4..40"].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params[0]!.tab).toBe("sky");
+    expect(r.tabs).toEqual([{ id: "sky", label: "Sky" }]);
+  });
+
+  it("multiple bare groups", () => {
+    const src = [
+      "group Sky",
+      "param skyW 19 range:4..40",
+      "group Water",
+      "param waterW 12 range:4..30",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params[0]!.tab).toBe("sky");
+    expect(r.params[1]!.tab).toBe("water");
+    expect(r.tabs).toEqual([
+      { id: "sky", label: "Sky" },
+      { id: "water", label: "Water" },
+    ]);
+  });
+
+  it("group quoted string still works (backward compat)", () => {
+    const src = ['group "Lightning Bolts"', "param x 5 range:0..10"].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params[0]!.tab).toBe("lightning-bolts");
+    expect(r.tabs[0]!.label).toBe("Lightning Bolts");
+  });
+
+  // inline param group
+  it("inline param group with bare identifier", () => {
+    const r = compile("param size 10 range:1..50 group:Style");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params[0]!.tab).toBe("style");
+    expect(r.tabs).toEqual([{ id: "style", label: "Style" }]);
+  });
+
+  it("inline param group quoted still works (backward compat)", () => {
+    const r = compile('param size 10 range:1..50 group:"Style"');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params[0]!.tab).toBe("style");
+  });
+
+  // mixed bare and quoted
+  it("mixed bare and quoted in same file", () => {
+    const src = [
+      "use bristle-stroke-renderer",
+      'use "curl-flow-field"',
+      "layer terrain:sky noon",
+      'layer "terrain:water" "lake"',
+      "group Sky",
+      "param skyW 19 range:4..40",
+      'group "Water"',
+      "param waterW 12 range:4..30",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.components).toEqual(["bristle-stroke-renderer", "curl-flow-field"]);
+    expect(r.layers).toHaveLength(2);
+    expect(r.layers[0]!.type).toBe("terrain:sky");
+    expect(r.layers[1]!.type).toBe("terrain:water");
+    expect(r.tabs).toEqual([
+      { id: "sky", label: "Sky" },
+      { id: "water", label: "Water" },
+    ]);
+  });
+});
+
+describe("compile — colorAt/alphaAt builtins (v2)", () => {
+  it("colorAt compiles as a global function call", () => {
+    const r = compile("base = buffer(100, 100)\nc = colorAt(base, 50, 50)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("colorAt(base, 50, 50)");
+  });
+
+  it("alphaAt compiles as a global function call", () => {
+    const r = compile("mask = buffer(100, 100)\na = alphaAt(mask, 10, 20)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("alphaAt(mask, 10, 20)");
+  });
+
+  it("pixelAt compiles as a global function call", () => {
+    const r = compile("buf = buffer(100, 100)\np = pixelAt(buf, 0, 0)");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("pixelAt(buf, 0, 0)");
+  });
+});
+
+describe("compile — metadata header (v2)", () => {
+  it("title extracts from bare words", () => {
+    const r = compile("title Stormy Sea Impressionist\nbg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.title).toBe("Stormy Sea Impressionist");
+  });
+
+  it("title extracts from quoted string", () => {
+    const r = compile('title "Stormy Sea — Impressionist"\nbg black');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.title).toBe("Stormy Sea — Impressionist");
+  });
+
+  it("subtitle extracts with hyphens preserved", () => {
+    const r = compile("subtitle Per-layer bristle-stroke painting\nbg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.subtitle).toBe("Per-layer bristle-stroke painting");
+  });
+
+  it("compositionLevel extracts valid values", () => {
+    const r = compile("compositionLevel complex\nbg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.compositionLevel).toBe("complex");
+  });
+
+  it("compositionLevel rejects invalid values", () => {
+    const r = compile("compositionLevel super\nbg black");
+    expect(r.ok).toBe(false);
+  });
+
+  it("philosophy extracts from bare words", () => {
+    const r = compile("philosophy Translate plugin composites into painterly passes\nbg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.philosophy).toContain("Translate");
+    expect(r.metadata.philosophy).toContain("painterly");
+  });
+
+  it("philosophy extracts from quoted string", () => {
+    const r = compile('philosophy "Multi-line content with special chars: dashes—and colons: here"\nbg black');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.philosophy).toBe("Multi-line content with special chars: dashes—and colons: here");
+  });
+
+  it("all metadata fields together", () => {
+    const src = [
+      "title Stormy Sea Impressionist",
+      'subtitle "Per-layer bristle-stroke painting with lightning"',
+      "compositionLevel complex",
+      'philosophy "Translate plugin layer composites into painterly dab passes."',
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.title).toBe("Stormy Sea Impressionist");
+    expect(r.metadata.subtitle).toBe("Per-layer bristle-stroke painting with lightning");
+    expect(r.metadata.compositionLevel).toBe("complex");
+    expect(r.metadata.philosophy).toBe("Translate plugin layer composites into painterly dab passes.");
+  });
+
+  it("metadata does not emit code", () => {
+    const r = compile("title My Sketch\ncompositionLevel simple\nbg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).not.toContain("title");
+    expect(r.code).not.toContain("My Sketch");
+    expect(r.code).not.toContain("compositionLevel");
+    expect(r.code).toContain("ctx.fillStyle");
+  });
+
+  it("empty metadata when no directives", () => {
+    const r = compile("bg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata).toEqual({});
+  });
+
+  it("metadata coexists with layers, params, and groups", () => {
+    const src = [
+      "title Storm Painting",
+      "compositionLevel complex",
+      "layer terrain:sky noon",
+      "group Sky",
+      "param skyW 19 range:4..40",
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.title).toBe("Storm Painting");
+    expect(r.metadata.compositionLevel).toBe("complex");
+    expect(r.layers).toHaveLength(1);
+    expect(r.params).toHaveLength(1);
+    expect(r.params[0]!.tab).toBe("sky");
+  });
+});
+
+describe("compile — paramset templates (v2)", () => {
+  it("basic paramset definition and instantiation", () => {
+    const src = [
+      "paramset bristle(dabWidth, bristles, alphaMin, alphaMax, dabs):",
+      "  param {prefix}DabWidth {dabWidth} range:4..40 step:1",
+      "  param {prefix}Bristles {bristles} range:3..12 step:1",
+      "  param {prefix}AlphaMin {alphaMin} range:0..1 step:0.05",
+      "  param {prefix}AlphaMax {alphaMax} range:0..1 step:0.05",
+      "  param {prefix}Dabs {dabs} range:500..5000 step:100",
+      "",
+      "bristle sky(19, 6, 0.4, 0.8, 1800)",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params).toHaveLength(5);
+    expect(r.params[0]).toMatchObject({ key: "skyDabWidth", default: 19, min: 4, max: 40, step: 1 });
+    expect(r.params[1]).toMatchObject({ key: "skyBristles", default: 6, min: 3, max: 12, step: 1 });
+    expect(r.params[2]).toMatchObject({ key: "skyAlphaMin", default: 0.4, min: 0, max: 1, step: 0.05 });
+    expect(r.params[3]).toMatchObject({ key: "skyAlphaMax", default: 0.8, min: 0, max: 1, step: 0.05 });
+    expect(r.params[4]).toMatchObject({ key: "skyDabs", default: 1800, min: 500, max: 5000, step: 100 });
+  });
+
+  it("multiple instantiations with different prefixes", () => {
+    const src = [
+      "paramset bristle(dabWidth, bristles):",
+      "  param {prefix}DabWidth {dabWidth} range:4..40 step:1",
+      "  param {prefix}Bristles {bristles} range:3..12 step:1",
+      "",
+      "bristle sky(19, 6)",
+      "bristle water(12, 8)",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params).toHaveLength(4);
+    expect(r.params[0]!.key).toBe("skyDabWidth");
+    expect(r.params[1]!.key).toBe("skyBristles");
+    expect(r.params[2]!.key).toBe("waterDabWidth");
+    expect(r.params[3]!.key).toBe("waterBristles");
+  });
+
+  it("paramset with groups", () => {
+    const src = [
+      "paramset bristle(dabWidth, bristles):",
+      "  param {prefix}DabWidth {dabWidth} range:4..40 step:1",
+      "  param {prefix}Bristles {bristles} range:3..12 step:1",
+      "",
+      "group Sky",
+      "bristle sky(19, 6)",
+      "group Water",
+      "bristle water(12, 8)",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.params[0]!.tab).toBe("sky");
+    expect(r.params[1]!.tab).toBe("sky");
+    expect(r.params[2]!.tab).toBe("water");
+    expect(r.params[3]!.tab).toBe("water");
+  });
+
+  it("paramset does not emit any definition code", () => {
+    const src = [
+      "paramset bristle(dabWidth):",
+      "  param {prefix}W {dabWidth} range:4..40 step:1",
+      "",
+      "bristle sky(19)",
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).not.toContain("paramset");
+    expect(r.code).not.toContain("bristle");
+    expect(r.code).toContain('let skyW = __params__["skyW"]');
+  });
+
+  it("paramset coexists with metadata and layers", () => {
+    const src = [
+      "title Storm Painting",
+      "paramset bristle(dabWidth):",
+      "  param {prefix}W {dabWidth} range:4..40",
+      "",
+      "layer terrain:sky noon",
+      "bristle sky(19)",
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.title).toBe("Storm Painting");
+    expect(r.layers).toHaveLength(1);
+    expect(r.params).toHaveLength(1);
+    expect(r.params[0]!.key).toBe("skyW");
+  });
+});

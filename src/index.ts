@@ -1,7 +1,8 @@
 import { tokenize } from "./compiler/tokenizer";
 import { parse, ParseError } from "./compiler/parser";
 import { codegen } from "./compiler/codegen";
-export { tokenize, parse, codegen, ParseError };
+import { expandParamSets } from "./compiler/paramset";
+export { tokenize, parse, codegen, ParseError, expandParamSets };
 export type { Token, TokenKind } from "./compiler/token";
 export type { Program } from "./compiler/ast";
 
@@ -50,6 +51,14 @@ export interface LayerExtract {
   visible?: boolean;
 }
 
+/** Sketch metadata extracted from header directives (maps to SketchDefinition fields). */
+export interface MetadataExtract {
+  title?: string;
+  subtitle?: string;
+  philosophy?: string;
+  compositionLevel?: "minimal" | "simple" | "moderate" | "complex" | "extreme";
+}
+
 /** Successful compilation result. */
 export interface CompileSuccess {
   ok: true;
@@ -65,6 +74,8 @@ export interface CompileSuccess {
   layers: LayerExtract[];
   /** Component names extracted from `use "component-name"` declarations. */
   components: string[];
+  /** Sketch metadata from header directives (title, subtitle, philosophy, compositionLevel). */
+  metadata: MetadataExtract;
 }
 
 /** Failed compilation result. */
@@ -91,7 +102,8 @@ export type CompileResult = CompileSuccess | CompileFailure;
  */
 export function compile(source: string): CompileResult {
   try {
-    const tokens = tokenize(source);
+    const expanded = expandParamSets(source);
+    const tokens = tokenize(expanded);
     const program = parse(tokens);
     return codegen(program);
   } catch (err) {

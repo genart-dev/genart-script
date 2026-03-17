@@ -1,6 +1,6 @@
 import type { Token } from "./token";
 import type {
-  Program, TopLevel, Stmt, Expr, BlockHeader, NamedArg,
+  Program, TopLevel, Stmt, Expr, BlockHeader, NamedArg, Metadata,
   DrawCmd, BlockStmt, ParamDecl, ColorDecl, LayerDecl, Assign, MultiAssign,
   BgCmd, UseStmt, UseComponentStmt, SeedStmt, ReturnStmt, PrintStmt, WatchStmt,
   ExprStmt, Loc, NumberLit, StringLit, ColorLit, Ident,
@@ -50,6 +50,53 @@ export function parse(tokens: Token[]): Program {
     if (check("newline")) pos++;
   }
 
+  const METADATA_KEYS = new Set(["title", "subtitle", "philosophy", "compositionLevel"]);
+  const COMPOSITION_LEVELS = new Set(["minimal", "simple", "moderate", "complex", "extreme"]);
+
+  /**
+   * Consume all tokens until newline/eof and reconstruct the original text.
+   * Preserves adjacency (no space between `Per` `-` `layer`) using column positions.
+   * If first token is a quoted string, returns it directly (allows special chars).
+   */
+  function parseRestOfLine(): string {
+    if (check("string")) return eat("string").value;
+    let result = "";
+    let lastEnd = -1;
+    while (!check("newline") && !check("eof") && !check("dedent")) {
+      const t = cur();
+      pos++;
+      const tokenCol = t.col; // 1-based
+      // Add space only if there's a gap between this token and the previous one
+      if (lastEnd >= 0 && tokenCol > lastEnd) result += " ";
+      result += t.value;
+      // Estimate end column: col + length of the token's text representation
+      lastEnd = tokenCol + t.value.length;
+    }
+    return result;
+  }
+
+  /**
+   * Parse a bare identifier or quoted string.
+   * Bare idents can include hyphens (`bristle-stroke-renderer`)
+   * and colons (`terrain:sky`). Quoted strings are always accepted.
+   */
+  function parseBareString(): string {
+    if (check("string")) return eat("string").value;
+    let result = eat("ident").value;
+    while (true) {
+      if (check("op", "-") && peek(1).kind === "ident") {
+        eat("op", "-");
+        result += "-" + eat("ident").value;
+      } else if (check("op", ":") && peek(1).kind === "ident") {
+        eat("op", ":");
+        result += ":" + eat("ident").value;
+      } else {
+        break;
+      }
+    }
+    return result;
+  }
+
   // ---------------------------------------------------------------------------
   // Block body: consumes indent … dedent
   // ---------------------------------------------------------------------------
@@ -82,18 +129,22 @@ export function parse(tokens: Token[]): Program {
       // layer declaration
       if (name === "layer") return [parseLayerDecl() as unknown as Stmt];
 
-      // use easing|shapes|palettes  OR  use "component-name"
+      // use easing|shapes|palettes  OR  use "component-name"  OR  use component-name
       if (name === "use") {
         pos++;
         const l = { line: t.line, col: t.col };
-        if (check("string")) {
-          const componentName = eat("string").value;
+        // Known standard libraries (bare ident followed by newline/eof)
+        const LIBS = new Set(["easing", "shapes", "palettes"]);
+        if (check("ident") && LIBS.has(cur().value) &&
+            (peek(1).kind === "newline" || peek(1).kind === "eof")) {
+          const lib = eat("ident").value as UseStmt["lib"];
           eatNewline();
-          return [{ kind: "use-component", name: componentName, loc: l } as UseComponentStmt];
+          return [{ kind: "use", lib, loc: l }];
         }
-        const lib = eat("ident").value as UseStmt["lib"];
+        // Quoted or bare component name
+        const componentName = parseBareString();
         eatNewline();
-        return [{ kind: "use", lib, loc: l }];
+        return [{ kind: "use-component", name: componentName, loc: l } as UseComponentStmt];
       }
 
       // seed
@@ -201,7 +252,7 @@ export function parse(tokens: Token[]): Program {
       } else if (key === "label") {
         label = eat("string").value;
       } else if (key === "group") {
-        group = eat("string").value;
+        group = parseBareString();
       }
     }
     eatNewline();
@@ -229,8 +280,8 @@ export function parse(tokens: Token[]): Program {
   function parseLayerDecl(): LayerDecl {
     const l = loc();
     eat("ident", "layer");
-    const type = eat("string").value;
-    const preset = eat("string").value;
+    const type = parseBareString();
+    const preset = parseBareString();
     const named: NamedArg[] = [];
     while (!check("newline") && !check("eof") && !check("dedent")) {
       if (cur().kind === "ident" && peek(1).kind === "op" && peek(1).value === ":") {
@@ -682,15 +733,36 @@ export function parse(tokens: Token[]): Program {
   /** Current group set by `group "label"` directives. Applied to subsequent params. */
   let currentGroup: string | undefined;
 
+  /** Metadata from header directives. */
+  const metadata: Metadata = {};
+
   const body: TopLevel[] = [];
   while (!check("eof")) {
     skipNewlines();
     if (check("eof")) break;
 
-    // `group "label"` directive — sets group for subsequent params
-    if (cur().kind === "ident" && cur().value === "group" && peek(1).kind === "string") {
+    // Metadata header directives: title, subtitle, philosophy, compositionLevel
+    if (cur().kind === "ident" && METADATA_KEYS.has(cur().value)) {
+      const key = eat("ident").value;
+      const value = parseRestOfLine();
+      if (key === "compositionLevel") {
+        if (COMPOSITION_LEVELS.has(value)) {
+          metadata.compositionLevel = value as Metadata["compositionLevel"];
+        } else {
+          throw new ParseError(`Invalid compositionLevel "${value}" — expected minimal, simple, moderate, complex, or extreme`, loc());
+        }
+      } else {
+        (metadata as Record<string, string>)[key] = value;
+      }
+      eatNewline();
+      continue;
+    }
+
+    // `group "label"` or `group Label` directive — sets group for subsequent params
+    if (cur().kind === "ident" && cur().value === "group" &&
+        (peek(1).kind === "string" || peek(1).kind === "ident")) {
       pos++; // skip `group`
-      const groupName = eat("string").value;
+      const groupName = parseBareString();
       currentGroup = groupName || undefined;
       eatNewline();
       continue;
@@ -706,5 +778,5 @@ export function parse(tokens: Token[]): Program {
     body.push(...nodes);
   }
 
-  return { body };
+  return { body, metadata };
 }

@@ -292,7 +292,16 @@ export interface LayerDecl {
   loc: Loc;
 }
 
+/** Sketch metadata from header directives. */
+export interface Metadata {
+  title?: string;
+  subtitle?: string;
+  philosophy?: string;
+  compositionLevel?: "minimal" | "simple" | "moderate" | "complex" | "extreme";
+}
+
 /** The complete parsed program. */
 export interface Program {
   body: TopLevel[];
+  metadata: Metadata;
 }

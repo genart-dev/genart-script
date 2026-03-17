@@ -5,7 +5,7 @@ import type {
   ExprStmt, BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit, ObjectLit,
   Gradient, Lambda, NumberLit, StringLit, ColorLit, Ident,
 } from "./ast";
-import type { CompileResult, ParamExtract, TabExtract, ColorExtract, LayerExtract } from "../index";
+import type { CompileResult, ParamExtract, TabExtract, ColorExtract, LayerExtract, MetadataExtract } from "../index";
 import { EASING_LIB, SHAPES_LIB, PALETTES_LIB } from "./libs";
 
 const VERSION = "0.1.0";
@@ -17,6 +17,7 @@ export function codegen(program: Program): CompileResult {
   const colors: ColorExtract[] = [];
   const layers: LayerExtract[] = [];
   const components: string[] = [];
+  const metadata: MetadataExtract = { ...program.metadata };
   const usedLibs = new Set<string>();
   const errors: Array<{ line: number; col: number; message: string }> = [];
 
@@ -160,7 +161,7 @@ export function codegen(program: Program): CompileResult {
   const code = lines.join("\n");
 
   if (errors.length) return { ok: false, errors };
-  return { ok: true, code, params, tabs, colors, layers, components };
+  return { ok: true, code, params, tabs, colors, layers, components, metadata };
 
   // ---------------------------------------------------------------------------
   // Emit helpers

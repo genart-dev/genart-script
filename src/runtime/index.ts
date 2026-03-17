@@ -33,6 +33,8 @@ export function buildGlobals(
   // Effects read it to choose quality path. Exposed as `__renderCtx__` global.
   const __renderCtx__: RenderCtxRef = { value: "static" };
 
+  const pixelSampler = createPixelSampler();
+
   return {
     __renderCtx__,
     // Canvas context helpers
@@ -83,6 +85,11 @@ export function buildGlobals(
       return c;
     },
 
+    // Pixel sampling builtins — cache getImageData per canvas for zero-copy reads
+    colorAt: pixelSampler.colorAt,
+    alphaAt: pixelSampler.alphaAt,
+    pixelAt: pixelSampler.pixelAt,
+
     // Vector type — `v = vec(x, y)`, then `v.add(u)`, `v.mag()`, etc.
     vec,
 
@@ -118,6 +125,45 @@ export function buildGlobals(
       const m = ctx.measureText(text);
       ctx.font = saved;
       return { width: m.width, height: size };
+    },
+  };
+}
+
+/**
+ * Pixel sampling builtins — cache getImageData per canvas for zero-copy lookups.
+ * `colorAt(canvas, x, y)` → `[r, g, b]`
+ * `alphaAt(canvas, x, y)` → `0–255`
+ * `pixelAt(canvas, x, y)` → `[r, g, b, a]`
+ */
+function createPixelSampler() {
+  const cache = new WeakMap<HTMLCanvasElement, { data: Uint8ClampedArray; w: number }>();
+
+  function getData(canvas: HTMLCanvasElement): { data: Uint8ClampedArray; w: number } {
+    let cached = cache.get(canvas);
+    if (!cached) {
+      const ctx2d = canvas.getContext("2d")!;
+      const imageData = ctx2d.getImageData(0, 0, canvas.width, canvas.height);
+      cached = { data: imageData.data, w: canvas.width };
+      cache.set(canvas, cached);
+    }
+    return cached;
+  }
+
+  return {
+    colorAt(canvas: HTMLCanvasElement, x: number, y: number): [number, number, number] {
+      const { data, w } = getData(canvas);
+      const idx = (Math.round(y) * w + Math.round(x)) * 4;
+      return [data[idx]!, data[idx + 1]!, data[idx + 2]!];
+    },
+    alphaAt(canvas: HTMLCanvasElement, x: number, y: number): number {
+      const { data, w } = getData(canvas);
+      const idx = (Math.round(y) * w + Math.round(x)) * 4;
+      return data[idx + 3]!;
+    },
+    pixelAt(canvas: HTMLCanvasElement, x: number, y: number): [number, number, number, number] {
+      const { data, w } = getData(canvas);
+      const idx = (Math.round(y) * w + Math.round(x)) * 4;
+      return [data[idx]!, data[idx + 1]!, data[idx + 2]!, data[idx + 3]!];
     },
   };
 }
@@ -173,6 +219,9 @@ export interface RuntimeGlobals {
   __colorAlpha__: typeof colorAlpha;
   __linearGradient__: (angle: number, stops: string[]) => CanvasGradient;
   __radialGradient__: (cx: number, cy: number, stops: string[]) => CanvasGradient;
+  colorAt: (canvas: HTMLCanvasElement, x: number, y: number) => [number, number, number];
+  alphaAt: (canvas: HTMLCanvasElement, x: number, y: number) => number;
+  pixelAt: (canvas: HTMLCanvasElement, x: number, y: number) => [number, number, number, number];
   buffer: (w: number, h: number) => HTMLCanvasElement;
   vec: (x: number, y: number) => Vec;
   load: (url: string) => HTMLImageElement;
