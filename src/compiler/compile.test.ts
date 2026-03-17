@@ -1336,4 +1336,164 @@ describe("compile — bristlePass directive (v2)", () => {
     if (!r.ok) return;
     expect(r.code).not.toContain("bristlePass");
   });
+
+  it("bristlePass with scatter uses probabilistic check instead of threshold", () => {
+    const src = [
+      "bristlePass rain seed:600 mask:rainMask texture:stipple:",
+      "  count: 2000",
+      "  width: 6",
+      "  bristles: 4",
+      "  alpha: [0.5, 0.85]",
+      "  angle: PI / 2",
+      "  scatter: 0.15 + (maskAlpha / 255) * 0.6",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Should have maskAlpha variable and probabilistic check
+    expect(r.code).toContain("maskAlpha");
+    expect(r.code).toContain("alphaAt(rainMask,");
+    // Should NOT have the hard < 10 threshold
+    expect(r.code).not.toContain("< 10");
+  });
+
+  it("bristlePass with custom color overrides colorAt sampling", () => {
+    const src = [
+      "bristlePass rain seed:600 mask:rainMask texture:stipple:",
+      "  count: 2000",
+      "  width: 6",
+      "  bristles: 4",
+      "  alpha: [0.5, 0.85]",
+      "  angle: PI / 2",
+      "  color: [220, 225, 245]",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Should use custom color, NOT colorAt(base, ...)
+    expect(r.code).not.toContain("colorAt(base,");
+    expect(r.code).toContain("[220, 225, 245]");
+  });
+
+  it("bristlePass with blend renders to offscreen buffer", () => {
+    const src = [
+      "bristlePass glow seed:770 mask:glowMask texture:feathered blend:screen:",
+      "  count: 1200",
+      "  width: 24",
+      "  bristles: 4",
+      "  alpha: [0.1, 0.35]",
+      "  angle: flowAngle",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Should create offscreen buffer and draw with blend
+    expect(r.code).toContain("buffer(w, h)");
+    expect(r.code).toContain('getContext("2d")');
+    expect(r.code).not.toContain("bristlePass");
+  });
+});
+
+describe("compile — forcePass directive (v2)", () => {
+  it("basic forcePass expands with proximity and distance check", () => {
+    const src = [
+      "forcePass bolt seed:777 path:boltPath radius:35 texture:impasto:",
+      "  count: 1500",
+      "  width: 12",
+      "  bristles: 6",
+      "  alpha: lerp(0.4, 0.9, proximity)",
+      "  angle: flowAngle",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("mulberry32(777)");
+    expect(r.code).toContain("boltPath.distAt(");
+    expect(r.code).toContain("> 35");
+    expect(r.code).toContain("proximity");
+    expect(r.code).toContain("renderBristleStroke(");
+    expect(r.code).toContain('"impasto"');
+  });
+
+  it("forcePass with sparse generates skip probability", () => {
+    const src = [
+      "forcePass bolt seed:777 path:boltPath radius:35 texture:impasto:",
+      "  count: 1500",
+      "  sparse: 0.35",
+      "  width: 12",
+      "  bristles: 6",
+      "  alpha: lerp(0.4, 0.9, proximity)",
+      "  angle: flowAngle",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("> 0.35");
+  });
+
+  it("forcePass with custom color expression", () => {
+    const src = [
+      "forcePass bolt seed:777 path:boltPath radius:35 texture:impasto:",
+      "  count: 1500",
+      "  width: 12",
+      "  bristles: 6",
+      "  alpha: lerp(0.4, 0.9, proximity)",
+      "  angle: flowAngle",
+      "  color: [floor(lerp(baseColor[0], 250, proximity)), 245, 255]",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("baseColor");
+    expect(r.code).toContain("colorAt(base,");
+  });
+
+  it("forcePass with blend:screen renders to offscreen buffer", () => {
+    const src = [
+      "forcePass glow seed:770 path:boltPath radius:100 texture:feathered blend:screen:",
+      "  count: 1200",
+      "  width: 24",
+      "  bristles: 4",
+      "  alpha: lerp(0.03, 0.35, proximity * proximity)",
+      "  angle: flowAngle",
+      "  color: [210, 220, 250]",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("buffer(w, h)");
+    expect(r.code).toContain('getContext("2d")');
+    expect(r.code).not.toContain("forcePass");
+  });
+
+  it("forcePass exposes path variable for angle expressions", () => {
+    const src = [
+      "forcePass bolt seed:777 path:myBolt radius:50 texture:smooth:",
+      "  count: 1000",
+      "  width: 10",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: path.angleAt(pos.x, pos.y, flowAngle)",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // path.angleAt(...) in the source becomes myBolt.angleAt(...) in output
+    expect(r.code).toContain("myBolt.angleAt(");
+  });
+
+  it("forcePass does not contain directive keywords in output", () => {
+    const src = [
+      "forcePass bolt seed:777 path:boltPath radius:35 texture:impasto:",
+      "  count: 1500",
+      "  width: 12",
+      "  bristles: 6",
+      "  alpha: lerp(0.4, 0.9, proximity)",
+      "  angle: flowAngle",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).not.toContain("forcePass");
+  });
 });
