@@ -51,6 +51,25 @@ function arrow(x, y, angle, size) {
   ctx.restore();
 }`;
 
+/**
+ * Convenience helpers auto-injected when `library "p5.brush"` is declared.
+ * Requires p5.brush v2.x loaded as a global — call from within draw().
+ * Coordinate offsets (ox, oy) must be set by the sketch: ox = -width/2, oy = -height/2.
+ */
+export const P5_BRUSH_LIB = `\
+// p5.brush helpers (auto-injected by GenArt Script)
+function brushStroke(x1, y1, x2, y2, type, weight, clr) {
+  brush.set(type ?? "marker", weight ?? 1, clr ?? "#000");
+  brush.line(x1, y1, x2, y2);
+}
+function watercolorFill(alpha) {
+  brush.fill("watercolor", alpha ?? 80);
+}
+function hatchRegion(x, y, w, h, type, weight, clr) {
+  brush.set(type ?? "hatch", weight ?? 1, clr ?? "#000");
+  brush.rect(x, y, w, h);
+}`;
+
 export const PALETTES_LIB = `\
 const nord = ["#2e3440","#3b4252","#434c5e","#4c566a","#d8dee9","#e5e9f0","#eceff4","#8fbcbb","#88c0d0","#81a1c1","#5e81ac","#bf616a","#d08770","#ebcb8b","#a3be8c","#b48ead"];
 const solarized = ["#002b36","#073642","#586e75","#657b83","#839496","#93a1a1","#fdf6e3","#b58900","#cb4b16","#dc322f","#d33682","#6c71c4","#268bd2","#2aa198","#859900","#eee8d5"];

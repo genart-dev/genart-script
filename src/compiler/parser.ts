@@ -1,7 +1,7 @@
 import type { Token } from "./token";
 import type {
   Program, TopLevel, Stmt, Expr, BlockHeader, NamedArg, Metadata,
-  DrawCmd, BlockStmt, ParamDecl, ColorDecl, LayerDecl, Assign, MultiAssign,
+  DrawCmd, BlockStmt, ParamDecl, ColorDecl, LayerDecl, LibraryDecl, Assign, MultiAssign,
   BgCmd, UseStmt, UseComponentStmt, SeedStmt, ReturnStmt, PrintStmt, WatchStmt,
   ExprStmt, Loc, NumberLit, StringLit, ColorLit, Ident,
   BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit, ObjectLit, Gradient, Lambda,
@@ -145,6 +145,21 @@ export function parse(tokens: Token[]): Program {
         const componentName = parseBareString();
         eatNewline();
         return [{ kind: "use-component", name: componentName, loc: l } as UseComponentStmt];
+      }
+
+      // library "name" [version:"x.y.z"]
+      if (name === "library") {
+        pos++;
+        const l = { line: t.line, col: t.col };
+        const libName = eat("string").value;
+        let version: string | undefined;
+        if (check("ident") && cur().value === "version") {
+          eat("ident", "version");
+          eat("op", ":");
+          version = eat("string").value;
+        }
+        eatNewline();
+        return [{ kind: "library", name: libName, version, loc: l } as LibraryDecl];
       }
 
       // seed

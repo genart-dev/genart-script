@@ -200,6 +200,17 @@ export interface UseStmt {
   loc: Loc;
 }
 
+/**
+ * `library "p5.brush"` — declare an external library dependency.
+ * Optional `version:"x.y.z"` overrides the preset's default version.
+ */
+export interface LibraryDecl {
+  kind: "library";
+  name: string;
+  version?: string;
+  loc: Loc;
+}
+
 /** `use "component-name"` — external component reference. */
 export interface UseComponentStmt {
   kind: "use-component";
@@ -252,6 +263,7 @@ export type TopLevel =
   | ParamDecl
   | ColorDecl
   | LayerDecl
+  | LibraryDecl
   | Stmt;
 
 /** `param name default range:min..max label:"..." group:"..."` */

@@ -33,6 +33,14 @@ export interface ColorExtract {
   default: string;
 }
 
+/** An external library dependency extracted from a `library` declaration. */
+export interface LibraryExtract {
+  /** Library preset name, e.g. `"p5.brush"`. */
+  name: string;
+  /** Version override (if specified with `version:"x.y.z"`). */
+  version?: string;
+}
+
 /** A layer extracted from source at compile time (maps to DesignLayer). */
 export interface LayerExtract {
   /** Plugin layer type ID, e.g. `"terrain:sky"`. */
@@ -74,6 +82,8 @@ export interface CompileSuccess {
   layers: LayerExtract[];
   /** Component names extracted from `use "component-name"` declarations. */
   components: string[];
+  /** External libraries declared with `library "name"` directives. */
+  libraries: LibraryExtract[];
   /** Sketch metadata from header directives (title, subtitle, philosophy, compositionLevel). */
   metadata: MetadataExtract;
 }

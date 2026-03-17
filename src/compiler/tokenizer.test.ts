@@ -90,3 +90,50 @@ describe("tokenizer", () => {
     expect(tokenize("**")[0]).toMatchObject({ kind: "op", value: "**" });
   });
 });
+
+describe("tokenizer — implicit line continuation inside brackets", () => {
+  it("suppresses newline inside parentheses", () => {
+    const tokens = tokenize("foo(\n  1,\n  2\n)");
+    const k = tokens.map(t => t.kind);
+    // No newlines between ( and )
+    const lp = k.indexOf("lparen");
+    const rp = k.indexOf("rparen");
+    const between = k.slice(lp + 1, rp);
+    expect(between).not.toContain("newline");
+    expect(between).not.toContain("indent");
+    expect(between).not.toContain("dedent");
+  });
+
+  it("suppresses newline inside square brackets", () => {
+    const tokens = tokenize("x = [\n  1,\n  2,\n  3\n]");
+    const k = tokens.map(t => t.kind);
+    const lb = k.indexOf("lbracket");
+    const rb = k.indexOf("rbracket");
+    const between = k.slice(lb + 1, rb);
+    expect(between).not.toContain("newline");
+  });
+
+  it("suppresses newline inside curly braces", () => {
+    const tokens = tokenize("x = {\n  a: 1,\n  b: 2\n}");
+    const k = tokens.map(t => t.kind);
+    const lb = k.indexOf("lbrace");
+    const rb = k.indexOf("rbrace");
+    const between = k.slice(lb + 1, rb);
+    expect(between).not.toContain("newline");
+  });
+
+  it("handles nested brackets", () => {
+    const tokens = tokenize("foo([\n  1,\n  2\n])");
+    const k = tokens.map(t => t.kind);
+    const lp = k.indexOf("lparen");
+    const rp = k.lastIndexOf("rparen");
+    const between = k.slice(lp + 1, rp);
+    expect(between).not.toContain("newline");
+  });
+
+  it("emits newline normally outside brackets", () => {
+    const tokens = tokenize("a = 1\nb = 2");
+    const k = tokens.map(t => t.kind);
+    expect(k).toContain("newline");
+  });
+});

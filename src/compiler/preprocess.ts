@@ -64,8 +64,9 @@ interface PassConfig {
   color?: string;
   scatter?: string;
   blend?: string;
-  // bristlePass-specific
+  // bristlePass-specific — either mask or layer (layer auto-generates mask)
   mask?: string;
+  layer?: string;
   // forcePass-specific
   path?: string;
   radius?: string;
@@ -76,13 +77,95 @@ interface PassConfig {
  * Run all preprocessing passes: paramset expansion, then pass directive expansion.
  */
 export function preprocess(source: string): string {
-  let result = expandParamSets(source);
+  let result = joinMultiLineStrings(source);
+  result = joinMetadataContinuations(result);
+  result = expandParamSets(result);
+  result = expandFlowDirective(result);
+  result = expandUnderpaintingDirective(result);
   result = expandPassDirectives(result);
   return result;
 }
 
 // Keep the old name as an alias for backward compat
 export { preprocess as expandParamSets };
+
+/**
+ * Join multi-line strings: if a line has an unclosed `"`, join subsequent lines
+ * until the closing `"` is found. Joined with a single space.
+ */
+function joinMultiLineStrings(source: string): string {
+  const lines = source.split("\n");
+  const output: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i]!;
+    // Count unescaped quotes — if odd, string spans to next line
+    let quoteCount = 0;
+    for (let j = 0; j < line.length; j++) {
+      if (line[j] === '"' && (j === 0 || line[j - 1] !== "\\")) quoteCount++;
+    }
+
+    if (quoteCount % 2 === 0) {
+      output.push(line);
+      i++;
+    } else {
+      // Unclosed string — join lines until we find the closing quote
+      let joined = line;
+      i++;
+      while (i < lines.length) {
+        const next = lines[i]!.trimStart();
+        joined += " " + next;
+        i++;
+        let nextQuotes = 0;
+        for (let j = 0; j < next.length; j++) {
+          if (next[j] === '"' && (j === 0 || next[j - 1] !== "\\")) nextQuotes++;
+        }
+        if (nextQuotes % 2 === 1) break; // Found the closing quote
+      }
+      output.push(joined);
+    }
+  }
+
+  return output.join("\n");
+}
+
+/**
+ * Join metadata continuation lines: if a metadata directive (title, subtitle,
+ * philosophy, compositionLevel) is followed by indented lines, join them as
+ * a single value.
+ */
+function joinMetadataContinuations(source: string): string {
+  const META_RE = /^(title|subtitle|philosophy|compositionLevel)\s/;
+  const lines = source.split("\n");
+  const output: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i]!;
+    if (META_RE.test(line.trim())) {
+      let joined = line;
+      i++;
+      // Consume indented continuation lines
+      while (i < lines.length) {
+        const next = lines[i]!;
+        // Continuation: starts with whitespace and isn't a blank line or new directive
+        if (next.length > 0 && /^\s+/.test(next) && !META_RE.test(next.trim())) {
+          joined += " " + next.trim();
+          i++;
+        } else {
+          break;
+        }
+      }
+      output.push(joined);
+    } else {
+      output.push(line);
+      i++;
+    }
+  }
+
+  return output.join("\n");
+}
 
 function expandParamSets(source: string): string {
   const lines = source.split("\n");
@@ -144,11 +227,22 @@ function expandParamSets(source: string): string {
   return output.join("\n");
 }
 
+/** Count net bracket depth change in a string. */
+function bracketBalance(s: string): number {
+  let depth = 0;
+  for (const ch of s) {
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") depth--;
+  }
+  return depth;
+}
+
 function parsePassBody(lines: string[], startIdx: number, headerIndent: string): { config: Record<string, string>; nextIdx: number } {
   const config: Record<string, string> = {};
   let i = startIdx;
   // Body lines must be indented MORE than the header
   const minIndent = headerIndent.length + 2;
+  let lastKey: string | undefined;
 
   while (i < lines.length) {
     const bodyLine = lines[i]!;
@@ -158,9 +252,31 @@ function parsePassBody(lines: string[], startIdx: number, headerIndent: string):
     if (lineIndent >= minIndent) {
       const kvMatch = bodyLine.trim().match(/^(\w+)\s*:\s*(.+)$/);
       if (kvMatch) {
-        config[kvMatch[1]!] = kvMatch[2]!.trim();
+        lastKey = kvMatch[1]!;
+        let value = kvMatch[2]!.trim();
+        i++;
+        // If value has unclosed brackets, consume continuation lines
+        let depth = bracketBalance(value);
+        while (depth > 0 && i < lines.length) {
+          const contLine = lines[i]!;
+          if (contLine.trim() === "") { i++; continue; }
+          const contIndent = contLine.match(/^(\s*)/)?.[1]?.length ?? 0;
+          if (contIndent >= minIndent) {
+            value += " " + contLine.trim();
+            depth += bracketBalance(contLine);
+            i++;
+          } else {
+            break;
+          }
+        }
+        config[lastKey] = value;
+      } else if (lastKey) {
+        // Continuation line (no key:) — append to previous value
+        config[lastKey] += " " + bodyLine.trim();
+        i++;
+      } else {
+        i++;
       }
-      i++;
     } else {
       break;
     }
@@ -177,7 +293,7 @@ function parseAlpha(value: string): { min: string; max: string } | null {
   return null;
 }
 
-function buildPassConfig(base: Partial<PassConfig>, kv: Record<string, string>): PassConfig {
+function buildPassConfig(base: Partial<PassConfig>, kv: Record<string, string>, declaredParams?: Set<string>): PassConfig {
   const config: PassConfig = {
     name: base.name ?? "pass",
     seed: base.seed ?? "0",
@@ -190,6 +306,17 @@ function buildPassConfig(base: Partial<PassConfig>, kv: Record<string, string>):
     angle: "flowAngle",
     ...base,
   };
+
+  // Auto-bind from paramset naming convention: {name}Dabs, {name}DabWidth, etc.
+  if (declaredParams && config.name) {
+    const n = config.name;
+    if (!kv.count && declaredParams.has(`${n}Dabs`)) kv.count = `${n}Dabs`;
+    if (!kv.width && declaredParams.has(`${n}DabWidth`)) kv.width = `${n}DabWidth`;
+    if (!kv.bristles && declaredParams.has(`${n}Bristles`)) kv.bristles = `${n}Bristles`;
+    if (!kv.alpha && declaredParams.has(`${n}AlphaMin`) && declaredParams.has(`${n}AlphaMax`)) {
+      kv.alpha = `[${n}AlphaMin, ${n}AlphaMax]`;
+    }
+  }
 
   for (const [key, value] of Object.entries(kv)) {
     switch (key) {
@@ -224,6 +351,162 @@ function buildPassConfig(base: Partial<PassConfig>, kv: Record<string, string>):
   return config;
 }
 
+/**
+ * Expand exclude shorthand: `varName(radius)` → `varName.excludes(pos.x, pos.y, radius)`
+ * Only matches a bare `ident(args)` pattern — skips if the expression already contains dots
+ * (e.g., `bolt.excludes(...)` passes through unchanged).
+ */
+function expandExcludeShorthand(expr: string): string {
+  // Only expand simple `name(args)` — no dots anywhere in the expression
+  if (expr.includes(".")) return expr;
+  return expr.replace(/^(\w+)\(([^)]+)\)$/, (_, name, args) => {
+    return `${name}.excludes(pos.x, pos.y, ${args})`;
+  });
+}
+
+/**
+ * Expand `flow gridSize:N turbulence:expr [seed:N]` into the standard painting infrastructure:
+ *   use curl-flow-field
+ *   use grid-placement
+ *   base = renderLayers()
+ *   __flow_rand = mulberry32(seed)
+ *   scene = createCurlFlowField(...)
+ *   positions = makeGrid(...)
+ *
+ * Also emits minWidth computation by scanning all *DabWidth params.
+ */
+function expandFlowDirective(source: string): string {
+  const lines = source.split("\n");
+  const output: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    // Match `flow` only when followed by named args (key:val) or alone on a line
+    // Must not match `flowAngle = ...` or similar assignments
+    const trimmed = line.trim();
+    const m = trimmed === "flow" || /^flow\s+\w+:/.test(trimmed)
+      ? line.match(/^(\s*)flow(?:\s+(.+))?\s*$/)
+      : null;
+
+    if (!m || trimmed.startsWith("//")) {
+      output.push(line);
+      continue;
+    }
+
+    const indent = m[1] ?? "";
+    const argsStr = m[2] ?? "";
+
+    // Parse named args: gridSize:300 turbulence:turbulence seed:42
+    const args: Record<string, string> = {};
+    for (const part of argsStr.match(/(\w+):(\S+)/g) ?? []) {
+      const [key, val] = part.split(":");
+      if (key && val) args[key] = val;
+    }
+
+    const gridSize = args.gridSize ?? "300";
+    const turbulence = args.turbulence ?? "0.3";
+    const seed = args.seed ?? "42";
+
+    // Collect all *DabWidth params for minWidth computation
+    const dabWidthParams: string[] = [];
+    for (const srcLine of lines) {
+      const pm = srcLine.match(/^\s*param\s+(\w*DabWidth)\b/);
+      if (pm) dabWidthParams.push(pm[1]!);
+    }
+
+    // Emit implicit component dependencies
+    output.push(`${indent}use curl-flow-field`);
+    output.push(`${indent}use grid-placement`);
+    output.push(``);
+
+    // Emit infrastructure
+    output.push(`${indent}base = renderLayers()`);
+    output.push(`${indent}__flow_rand = mulberry32(${seed})`);
+    output.push(`${indent}scene = createCurlFlowField({gridSize: ${gridSize}, waveScale: 2, turbulence: ${turbulence}, layers: [{scale: 1.0, weight: 0.5}]}, {seed: ${seed}, rand: __flow_rand, width: w, height: h})`);
+
+    // minWidth from all DabWidth params
+    if (dabWidthParams.length > 0) {
+      let minExpr = dabWidthParams[0]!;
+      for (let j = 1; j < dabWidthParams.length; j++) {
+        minExpr = `min(${minExpr}, ${dabWidthParams[j]})`;
+      }
+      output.push(`${indent}__flow_minWidth = ${minExpr}`);
+      output.push(`${indent}positions = makeGrid({left: 0, right: w, top: 0, bottom: h}, __flow_minWidth / 1.2, 0.4, __flow_rand)`);
+    } else {
+      // Fallback: use gridSize-based spacing
+      output.push(`${indent}positions = makeGrid({left: 0, right: w, top: 0, bottom: h}, 10, 0.4, __flow_rand)`);
+    }
+  }
+
+  return output.join("\n");
+}
+
+/**
+ * Expand `underpainting seed:N [width:N] [bristles:N] [alpha:N] [jitter:expr] [exclude:expr]:` into
+ * a full underpainting loop.
+ */
+function expandUnderpaintingDirective(source: string): string {
+  const lines = source.split("\n");
+  const output: string[] = [];
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i]!;
+    const m = line.match(
+      /^(\s*)underpainting\s+seed:(\S+)(.*?)\s*:\s*$/
+    );
+
+    if (!m) {
+      output.push(line);
+      i++;
+      continue;
+    }
+
+    const indent = m[1] ?? "";
+    const seed = m[2]!;
+    const rest = m[3] ?? "";
+
+    // Parse body (optional keys like exclude:, count:)
+    i++;
+    const { config: kv, nextIdx } = parsePassBody(lines, i, indent);
+    i = nextIdx;
+
+    // Parse inline header args
+    const headerArgs: Record<string, string> = {};
+    for (const part of rest.match(/(\w+):(\S+)/g) ?? []) {
+      const [key, val] = part.split(":");
+      if (key && val) headerArgs[key] = val;
+    }
+
+    const width = headerArgs.width ?? "22";
+    const bristles = headerArgs.bristles ?? "4";
+    const alpha = headerArgs.alpha ?? "0.85";
+    const jitterExpr = headerArgs.jitter ?? kv.jitter ?? "colorJitter + 5";
+    const count = kv.count ?? "3000";
+    const exclude = kv.exclude;
+
+    const rng = `__up_rng`;
+
+    output.push(`${indent}${rng} = mulberry32(${seed})`);
+    output.push(`${indent}__up_count = floor((${count}) * dabDensity)`);
+    output.push(`${indent}loop __up_count:`);
+    output.push(`${indent}  pos = positions[i % positions.length]`);
+    output.push(`${indent}  px = clamp(floor(pos.x), 0, w - 1)`);
+    output.push(`${indent}  py = clamp(floor(pos.y), 0, h - 1)`);
+
+    if (exclude) {
+      output.push(`${indent}  if ${expandExcludeShorthand(exclude)}:`);
+      output.push(`${indent}    continue`);
+    }
+
+    output.push(`${indent}  __up_color = colorAt(base, px, py)`);
+    output.push(`${indent}  __up_angle = scene.flowAngleAt(pos.x, pos.y) * flowInfluence * 0.5`);
+    output.push(`${indent}  renderBristleStroke(ctx, {x: pos.x, y: pos.y, angle: __up_angle, width: ${width}, bristleCount: ${bristles}, alpha: ${alpha}, rng: ${rng}, texture: "smooth", color: {mode: "single", palette: [__up_color], jitter: ${jitterExpr}}})`);
+  }
+
+  return output.join("\n");
+}
+
 function emitStrokeOpts(config: PassConfig): string {
   const extraOpts: string[] = [];
   if (config.steps) extraOpts.push(`steps: ${config.steps}`);
@@ -231,17 +514,30 @@ function emitStrokeOpts(config: PassConfig): string {
   return extraOpts.length ? ", " + extraOpts.join(", ") : "";
 }
 
+function collectDeclaredParams(source: string): Set<string> {
+  const params = new Set<string>();
+  for (const line of source.split("\n")) {
+    const m = line.match(/^\s*param\s+(\w+)\b/);
+    if (m) params.add(m[1]!);
+  }
+  return params;
+}
+
 function expandPassDirectives(source: string): string {
   const lines = source.split("\n");
   const output: string[] = [];
+  /** Cache for auto-generated layer masks — avoids duplicate renderLayer() calls */
+  const layerMaskCache = new Map<string, string>();
+  /** All declared param names (for auto-bind) */
+  const declaredParams = collectDeclaredParams(source);
 
   let i = 0;
   while (i < lines.length) {
     const line = lines[i]!;
 
-    // Match: bristlePass <name> seed:<N> mask:<expr> texture:<str> [blend:<mode>]:
+    // Match: bristlePass|pass <name> seed:<N> (mask:<expr>|layer:<layerType>) texture:<str> [blend:<mode>]:
     const bristleMatch = line.match(
-      /^(\s*)bristlePass\s+(\w+)\s+seed:(\S+)\s+mask:(\S+)\s+texture:(\S+)(?:\s+blend:(\S+))?\s*:\s*$/
+      /^(\s*)(?:bristlePass|pass)\s+(\w+)\s+seed:(\S+)\s+(?:mask:(\S+)|layer:(\S+))\s+texture:(\S+)(?:\s+blend:(\S+))?\s*:\s*$/
     );
 
     if (bristleMatch) {
@@ -250,15 +546,19 @@ function expandPassDirectives(source: string): string {
       const { config: kv, nextIdx } = parsePassBody(lines, i, indent);
       i = nextIdx;
 
+      const maskOrLayer: Partial<PassConfig> = bristleMatch[4]
+        ? { mask: bristleMatch[4] }
+        : { layer: bristleMatch[5] };
+
       const config = buildPassConfig({
         name: bristleMatch[2]!,
         seed: bristleMatch[3]!,
-        mask: bristleMatch[4]!,
-        texture: bristleMatch[5]!,
-        blend: bristleMatch[6],
-      }, kv);
+        ...maskOrLayer,
+        texture: bristleMatch[6]!,
+        blend: bristleMatch[7],
+      }, kv, declaredParams);
 
-      emitBristlePass(output, indent, config);
+      emitBristlePass(output, indent, config, layerMaskCache);
       continue;
     }
 
@@ -280,7 +580,7 @@ function expandPassDirectives(source: string): string {
         radius: forceMatch[5]!,
         texture: forceMatch[6]!,
         blend: forceMatch[7],
-      }, kv);
+      }, kv, declaredParams);
 
       emitForcePass(output, indent, config);
       continue;
@@ -293,7 +593,7 @@ function expandPassDirectives(source: string): string {
   return output.join("\n");
 }
 
-function emitBristlePass(output: string[], indent: string, config: PassConfig): void {
+function emitBristlePass(output: string[], indent: string, config: PassConfig, layerMaskCache?: Map<string, string>): void {
   const I = indent;
   const rng = `__bp_${config.name}_rng`;
   const countVar = `__bp_${config.name}_n`;
@@ -302,6 +602,18 @@ function emitBristlePass(output: string[], indent: string, config: PassConfig): 
     : `floor((${config.count}) * dabDensity)`;
   const jitterExpr = config.jitter ?? "colorJitter";
   const extraStr = emitStrokeOpts(config);
+
+  // Auto-generate mask from layer: declaration
+  if (config.layer && !config.mask) {
+    const cache = layerMaskCache ?? new Map<string, string>();
+    let maskVar = cache.get(config.layer);
+    if (!maskVar) {
+      maskVar = `__mask_${config.layer.replace(/[^a-zA-Z0-9]/g, "_")}`;
+      cache.set(config.layer, maskVar);
+      output.push(`${I}${maskVar} = renderLayer("${config.layer}")`);
+    }
+    config.mask = maskVar;
+  }
 
   // Determine render target (ctx or offscreen buffer)
   const useBlend = !!config.blend;
@@ -313,6 +625,7 @@ function emitBristlePass(output: string[], indent: string, config: PassConfig): 
   }
 
   output.push(`${I}${rng} = mulberry32(${config.seed})`);
+  output.push(`${I}rng = ${rng}`);
   output.push(`${I}${countVar} = ${countExpr}`);
   output.push(`${I}loop ${countVar}:`);
   output.push(`${I}  pos = positions[i % positions.length]`);
@@ -332,7 +645,7 @@ function emitBristlePass(output: string[], indent: string, config: PassConfig): 
   }
 
   if (config.exclude) {
-    output.push(`${I}  if ${config.exclude}:`);
+    output.push(`${I}  if ${expandExcludeShorthand(config.exclude)}:`);
     output.push(`${I}    continue`);
   }
 
@@ -384,6 +697,7 @@ function emitForcePass(output: string[], indent: string, config: PassConfig): vo
   }
 
   output.push(`${I}${rng} = mulberry32(${config.seed})`);
+  output.push(`${I}rng = ${rng}`);
   output.push(`${I}${countVar} = ${countExpr}`);
   output.push(`${I}loop ${countVar}:`);
   output.push(`${I}  pos = positions[i % positions.length]`);

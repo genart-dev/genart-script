@@ -5,8 +5,11 @@ import type {
   ExprStmt, BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit, ObjectLit,
   Gradient, Lambda, NumberLit, StringLit, ColorLit, Ident,
 } from "./ast";
-import type { CompileResult, ParamExtract, TabExtract, ColorExtract, LayerExtract, MetadataExtract } from "../index";
-import { EASING_LIB, SHAPES_LIB, PALETTES_LIB } from "./libs";
+import type { CompileResult, ParamExtract, TabExtract, ColorExtract, LayerExtract, LibraryExtract, MetadataExtract } from "../index";
+import { EASING_LIB, SHAPES_LIB, PALETTES_LIB, P5_BRUSH_LIB } from "./libs";
+
+/** Library names with curated presets in @genart-dev/format. */
+const KNOWN_LIBRARIES = new Set(["p5.brush"]);
 
 const VERSION = "0.1.0";
 
@@ -17,6 +20,7 @@ export function codegen(program: Program): CompileResult {
   const colors: ColorExtract[] = [];
   const layers: LayerExtract[] = [];
   const components: string[] = [];
+  const libraries: LibraryExtract[] = [];
   const metadata: MetadataExtract = { ...program.metadata };
   const usedLibs = new Set<string>();
   const errors: Array<{ line: number; col: number; message: string }> = [];
@@ -47,6 +51,15 @@ export function codegen(program: Program): CompileResult {
       usedLibs.add(node.lib);
     } else if (node.kind === "use-component") {
       components.push(node.name);
+    } else if (node.kind === "library") {
+      if (!KNOWN_LIBRARIES.has(node.name)) {
+        const known = [...KNOWN_LIBRARIES].join(", ");
+        errors.push({ line: node.loc.line, col: node.loc.col, message: `Unknown library "${node.name}". Known libraries: ${known}` });
+      } else {
+        const entry: LibraryExtract = { name: node.name };
+        if (node.version !== undefined) entry.version = node.version;
+        libraries.push(entry);
+      }
     }
   }
 
@@ -86,6 +99,9 @@ export function codegen(program: Program): CompileResult {
   if (usedLibs.has("shapes")) { lines.push(SHAPES_LIB); lines.push(``); }
   if (usedLibs.has("palettes")) { lines.push(PALETTES_LIB); lines.push(``); }
 
+  // Inline external library helpers (auto-injected when library declared)
+  if (libraries.some(l => l.name === "p5.brush")) { lines.push(P5_BRUSH_LIB); lines.push(``); }
+
   // Separate top-level body into sections
   const staticStmts: Stmt[] = [];
   let onceBlock: BlockStmt | null = null;
@@ -98,7 +114,7 @@ export function codegen(program: Program): CompileResult {
     if (node.kind === "block" && node.header.type === "frame") { frameBlock = node; continue; }
     if (node.kind === "block" && node.header.type === "post") { postBlock = node; continue; }
     if (node.kind === "block" && node.header.type === "fn") { fnDecls.push(node); continue; }
-    if (node.kind === "param" || node.kind === "color-decl" || node.kind === "layer" || node.kind === "use" || node.kind === "use-component") continue;
+    if (node.kind === "param" || node.kind === "color-decl" || node.kind === "layer" || node.kind === "use" || node.kind === "use-component" || node.kind === "library") continue;
     staticStmts.push(node as Stmt);
   }
 
@@ -161,7 +177,7 @@ export function codegen(program: Program): CompileResult {
   const code = lines.join("\n");
 
   if (errors.length) return { ok: false, errors };
-  return { ok: true, code, params, tabs, colors, layers, components, metadata };
+  return { ok: true, code, params, tabs, colors, layers, components, libraries, metadata };
 
   // ---------------------------------------------------------------------------
   // Emit helpers

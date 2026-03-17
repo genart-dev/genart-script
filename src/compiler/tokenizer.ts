@@ -19,7 +19,7 @@ const BLOCK_KEYWORDS = new Set([
 /** All keywords. */
 const KEYWORDS = new Set([
   ...BLOCK_KEYWORDS,
-  "param", "color", "use", "layer", "seed", "return", "print",
+  "param", "color", "use", "layer", "library", "seed", "return", "print",
   "watch", "bg", "circle", "rect", "line", "dot", "poly",
   "path", "arc", "draw", "text", "step", "in",
 ]);
@@ -29,6 +29,8 @@ export function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   const lines = source.split("\n");
   const indentStack: number[] = [0];
+  /** Bracket nesting depth — when > 0, newline/indent/dedent are suppressed */
+  let bracketDepth = 0;
 
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     const raw = lines[lineNum]!;
@@ -48,14 +50,17 @@ export function tokenize(source: string): Token[] {
       else break;
     }
 
-    const curIndent = indentStack[indentStack.length - 1]!;
-    if (indent > curIndent) {
-      indentStack.push(indent);
-      tokens.push({ kind: "indent", value: "", line, col: 1 });
-    } else {
-      while (indent < indentStack[indentStack.length - 1]!) {
-        indentStack.pop();
-        tokens.push({ kind: "dedent", value: "", line, col: 1 });
+    // Only emit indent/dedent when not inside brackets
+    if (bracketDepth === 0) {
+      const curIndent = indentStack[indentStack.length - 1]!;
+      if (indent > curIndent) {
+        indentStack.push(indent);
+        tokens.push({ kind: "indent", value: "", line, col: 1 });
+      } else {
+        while (indent < indentStack[indentStack.length - 1]!) {
+          indentStack.pop();
+          tokens.push({ kind: "dedent", value: "", line, col: 1 });
+        }
       }
     }
 
@@ -157,13 +162,13 @@ export function tokenize(source: string): Token[] {
         continue;
       }
 
-      // Parens / brackets
-      if (ch === "(") { tokens.push({ kind: "lparen", value: "(", line, col }); pos++; continue; }
-      if (ch === ")") { tokens.push({ kind: "rparen", value: ")", line, col }); pos++; continue; }
-      if (ch === "[") { tokens.push({ kind: "lbracket", value: "[", line, col }); pos++; continue; }
-      if (ch === "]") { tokens.push({ kind: "rbracket", value: "]", line, col }); pos++; continue; }
-      if (ch === "{") { tokens.push({ kind: "lbrace", value: "{", line, col }); pos++; continue; }
-      if (ch === "}") { tokens.push({ kind: "rbrace", value: "}", line, col }); pos++; continue; }
+      // Parens / brackets — track depth for implicit line continuation
+      if (ch === "(") { tokens.push({ kind: "lparen", value: "(", line, col }); bracketDepth++; pos++; continue; }
+      if (ch === ")") { tokens.push({ kind: "rparen", value: ")", line, col }); if (bracketDepth > 0) bracketDepth--; pos++; continue; }
+      if (ch === "[") { tokens.push({ kind: "lbracket", value: "[", line, col }); bracketDepth++; pos++; continue; }
+      if (ch === "]") { tokens.push({ kind: "rbracket", value: "]", line, col }); if (bracketDepth > 0) bracketDepth--; pos++; continue; }
+      if (ch === "{") { tokens.push({ kind: "lbrace", value: "{", line, col }); bracketDepth++; pos++; continue; }
+      if (ch === "}") { tokens.push({ kind: "rbrace", value: "}", line, col }); if (bracketDepth > 0) bracketDepth--; pos++; continue; }
 
       // Single-char operators
       if ("+-*/%=<>?:,.|!".includes(ch)) {
@@ -226,7 +231,10 @@ export function tokenize(source: string): Token[] {
       pos++;
     }
 
-    tokens.push({ kind: "newline", value: "", line, col: text.length + 1 });
+    // Only emit newline when not inside brackets
+    if (bracketDepth === 0) {
+      tokens.push({ kind: "newline", value: "", line, col: text.length + 1 });
+    }
   }
 
   // Close any remaining open indents

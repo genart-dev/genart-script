@@ -1039,6 +1039,14 @@ describe("compile — metadata header (v2)", () => {
     expect(r.metadata.philosophy).toContain("painterly");
   });
 
+  it("philosophy with keyword words (layer, color) in bare text", () => {
+    const r = compile("philosophy Translate plugin layer composites into color passes\nbg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.philosophy).toContain("layer");
+    expect(r.metadata.philosophy).toContain("color");
+  });
+
   it("philosophy extracts from quoted string", () => {
     const r = compile('philosophy "Multi-line content with special chars: dashes—and colons: here"\nbg black');
     expect(r.ok).toBe(true);
@@ -1495,5 +1503,663 @@ describe("compile — forcePass directive (v2)", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.code).not.toContain("forcePass");
+  });
+});
+
+describe("compile — rng() alias in pass bodies (v3)", () => {
+  it("bristlePass emits rng alias for __bp_*_rng", () => {
+    const src = [
+      "bristlePass sky seed:100 mask:skyMask texture:smooth:",
+      "  count: 1000",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle * 0.3",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("rng = __bp_sky_rng");
+  });
+
+  it("forcePass emits rng alias for __fp_*_rng", () => {
+    const src = [
+      "forcePass bolt seed:777 path:boltPath radius:35 texture:impasto:",
+      "  count: 1500",
+      "  width: 12",
+      "  bristles: 6",
+      "  alpha: lerp(0.4, 0.9, proximity)",
+      "  angle: flowAngle",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("rng = __fp_bolt_rng");
+  });
+
+  it("rng() can be used in bristlePass body expressions", () => {
+    const src = [
+      "bristlePass rain seed:600 mask:rainMask texture:stipple:",
+      "  count: 2000",
+      "  width: 6",
+      "  bristles: 4",
+      "  alpha: lerp(0.5, 0.85, rng())",
+      "  angle: PI / 2 + (rng() - 0.5) * 0.15",
+      "  scatter: 0.15",
+      "  color: [floor(lerp(190, 220, rng())), 200, 220]",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // rng alias is set before the loop, so rng() calls in body compile fine
+    expect(r.code).toContain("rng = __bp_rain_rng");
+    expect(r.code).toContain("rng()");
+  });
+});
+
+describe("compile — pass keyword alias (v3)", () => {
+  it("pass works as alias for bristlePass", () => {
+    const src = [
+      "pass sky seed:100 mask:skyMask texture:smooth:",
+      "  count: 1000",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle * 0.3",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("mulberry32(100)");
+    expect(r.code).toContain("alphaAt(skyMask,");
+    expect(r.code).toContain("renderBristleStroke(ctx,");
+    expect(r.code).not.toContain("bristlePass");
+    expect(r.code).not.toContain("pass sky");
+  });
+
+  it("pass with blend works like bristlePass blend", () => {
+    const src = [
+      "pass glow seed:770 mask:glowMask texture:feathered blend:screen:",
+      "  count: 1200",
+      "  width: 24",
+      "  bristles: 4",
+      "  alpha: [0.03, 0.35]",
+      "  angle: flowAngle",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("buffer(w, h)");
+    expect(r.code).toContain("screen");
+    expect(r.code).toContain("__bp_glow_buf");
+  });
+});
+
+describe("compile — bolt() exclude shorthand (v3)", () => {
+  it("bolt(30) expands to bolt.excludes(pos.x, pos.y, 30)", () => {
+    const src = [
+      "pass sky seed:100 mask:skyMask texture:smooth:",
+      "  count: 1000",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle * 0.3",
+      "  exclude: bolt(30)",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("bolt.excludes(pos.x, pos.y, 30)");
+  });
+
+  it("myPath(50) expands generically for any variable name", () => {
+    const src = [
+      "pass sky seed:100 mask:skyMask texture:smooth:",
+      "  count: 1000",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle",
+      "  exclude: myPath(50)",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("myPath.excludes(pos.x, pos.y, 50)");
+  });
+
+  it("full bolt.excludes(...) syntax still works unchanged", () => {
+    const src = [
+      "pass sky seed:100 mask:skyMask texture:smooth:",
+      "  count: 1000",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle",
+      "  exclude: bolt.excludes(pos.x, pos.y, 30)",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("bolt.excludes(pos.x, pos.y, 30)");
+  });
+});
+
+describe("compile — auto-masks from layer: (v3)", () => {
+  it("layer:terrain:sky auto-generates renderLayer call", () => {
+    const src = [
+      "pass sky seed:100 layer:terrain:sky texture:smooth:",
+      "  count: 1000",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle * 0.3",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('renderLayer("terrain:sky")');
+    expect(r.code).toContain("alphaAt(__mask_terrain_sky,");
+    expect(r.code).toContain("renderBristleStroke(ctx,");
+  });
+
+  it("two passes with same layer share the cached mask", () => {
+    const src = [
+      "pass sky1 seed:100 layer:terrain:sky texture:smooth:",
+      "  count: 1000",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle * 0.3",
+      "",
+      "pass sky2 seed:200 layer:terrain:sky texture:rough:",
+      "  count: 500",
+      "  width: 12",
+      "  bristles: 4",
+      "  alpha: [0.3, 0.7]",
+      "  angle: flowAngle * 0.5",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // renderLayer should appear only once
+    const matches = r.code.match(/renderLayer\("terrain:sky"\)/g);
+    expect(matches).toHaveLength(1);
+    // Both passes use the same mask variable
+    const maskMatches = r.code.match(/alphaAt\(__mask_terrain_sky,/g);
+    expect(maskMatches!.length).toBe(2);
+  });
+
+  it("different layers get separate renderLayer calls", () => {
+    const src = [
+      "pass sky seed:100 layer:terrain:sky texture:smooth:",
+      "  count: 1000",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle",
+      "",
+      "pass water seed:200 layer:terrain:water texture:rough:",
+      "  count: 1500",
+      "  width: 12",
+      "  bristles: 6",
+      "  alpha: [0.45, 0.9]",
+      "  angle: flowAngle",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('renderLayer("terrain:sky")');
+    expect(r.code).toContain('renderLayer("terrain:water")');
+  });
+
+  it("mask: still works for backward compatibility", () => {
+    const src = [
+      "pass sky seed:100 mask:skyMask texture:smooth:",
+      "  count: 1000",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("alphaAt(skyMask,");
+    expect(r.code).not.toContain("renderLayer");
+  });
+});
+
+describe("compile — param auto-bind (v3)", () => {
+  it("auto-binds count/width/bristles/alpha from paramset naming convention", () => {
+    const src = [
+      "param skyDabs 1800 range:500..5000",
+      "param skyDabWidth 19 range:4..40",
+      "param skyBristles 6 range:3..12",
+      "param skyAlphaMin 0.4 range:0..1",
+      "param skyAlphaMax 0.8 range:0..1",
+      "pass sky seed:100 mask:skyMask texture:smooth:",
+      "  angle: flowAngle * 0.3",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Auto-bound params should appear in the compiled output
+    expect(r.code).toContain("skyDabs");
+    expect(r.code).toContain("skyDabWidth");
+    expect(r.code).toContain("skyBristles");
+    expect(r.code).toContain("skyAlphaMin");
+    expect(r.code).toContain("skyAlphaMax");
+  });
+
+  it("explicit body keys override auto-bind", () => {
+    const src = [
+      "param skyDabs 1800 range:500..5000",
+      "param skyDabWidth 19 range:4..40",
+      "param skyBristles 6 range:3..12",
+      "param skyAlphaMin 0.4 range:0..1",
+      "param skyAlphaMax 0.8 range:0..1",
+      "pass sky seed:100 mask:skyMask texture:smooth:",
+      "  count: 999",
+      "  width: 25",
+      "  angle: flowAngle * 0.3",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Explicit overrides
+    expect(r.code).toContain("999");
+    expect(r.code).toContain("25");
+    // Auto-bound (not overridden)
+    expect(r.code).toContain("skyBristles");
+    expect(r.code).toContain("skyAlphaMin");
+  });
+
+  it("no auto-bind when params are not declared", () => {
+    const src = [
+      "pass sky seed:100 mask:skyMask texture:smooth:",
+      "  angle: flowAngle * 0.3",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Falls back to defaults (1000, 10, 6, 0.3, 0.8)
+    expect(r.code).not.toContain("skyDabs");
+    expect(r.code).toContain("1000");
+  });
+
+  it("auto-bind works with layer: syntax", () => {
+    const src = [
+      "param skyDabs 1800 range:500..5000",
+      "param skyDabWidth 19 range:4..40",
+      "param skyBristles 6 range:3..12",
+      "param skyAlphaMin 0.4 range:0..1",
+      "param skyAlphaMax 0.8 range:0..1",
+      "pass sky seed:100 layer:terrain:sky texture:smooth:",
+      "  angle: flowAngle * 0.3",
+      "  exclude: bolt(30)",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("skyDabs");
+    expect(r.code).toContain("skyDabWidth");
+    expect(r.code).toContain('renderLayer("terrain:sky")');
+    expect(r.code).toContain("bolt.excludes(pos.x, pos.y, 30)");
+  });
+
+  it("auto-bind works with forcePass too", () => {
+    const src = [
+      "param boltDabs 1500 range:300..4000",
+      "param boltDabWidth 12 range:3..25",
+      "param boltBristles 6 range:3..12",
+      "param boltAlphaMin 0.4 range:0..1",
+      "param boltAlphaMax 0.9 range:0..1",
+      "forcePass bolt seed:777 path:boltPath radius:35 texture:impasto:",
+      "  angle: flowAngle",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("boltDabs");
+    expect(r.code).toContain("boltDabWidth");
+    expect(r.code).toContain("boltBristles");
+    expect(r.code).toContain("boltAlphaMin");
+  });
+});
+
+describe("compile — flow directive (v3)", () => {
+  it("flow expands to renderLayers + flow field + grid", () => {
+    const src = [
+      "param skyDabWidth 19 range:4..40",
+      "param waterDabWidth 12 range:4..40",
+      "flow gridSize:300 turbulence:turbulence",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("renderLayers()");
+    expect(r.code).toContain("createCurlFlowField");
+    expect(r.code).toContain("gridSize: 300");
+    expect(r.code).toContain("makeGrid");
+    // minWidth auto-derived from DabWidth params
+    expect(r.code).toContain("min(skyDabWidth, waterDabWidth)");
+  });
+
+  it("flow with defaults when no args specified", () => {
+    const src = "flow\nbg black";
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("renderLayers()");
+    expect(r.code).toContain("gridSize: 300");
+    expect(r.code).toContain("mulberry32(42)");
+  });
+
+  it("flow with custom seed", () => {
+    const src = "flow seed:99\nbg black";
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("mulberry32(99)");
+  });
+
+  it("does not match flowAngle or other flow-prefixed identifiers", () => {
+    const src = "flowAngle = 1.5\nbg black";
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).not.toContain("renderLayers");
+    expect(r.code).toContain("flowAngle");
+  });
+
+  it("flow extracts use components", () => {
+    const src = "flow gridSize:200\nbg black";
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // use statements should be present in the expanded source
+    expect(r.components).toContain("curl-flow-field");
+    expect(r.components).toContain("grid-placement");
+  });
+});
+
+describe("compile — underpainting directive (v3)", () => {
+  it("underpainting expands to full wash loop", () => {
+    const src = [
+      "underpainting seed:1:",
+      "  exclude: bolt(40)",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("mulberry32(1)");
+    expect(r.code).toContain("colorAt(base,");
+    expect(r.code).toContain("renderBristleStroke(ctx,");
+    expect(r.code).toContain('"smooth"');
+    expect(r.code).toContain("bolt.excludes(pos.x, pos.y, 40)");
+  });
+
+  it("underpainting with custom width and bristles", () => {
+    const src = "underpainting seed:5 width:30 bristles:6 alpha:0.9:";
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("mulberry32(5)");
+    expect(r.code).toContain("width: 30");
+    expect(r.code).toContain("bristleCount: 6");
+    expect(r.code).toContain("alpha: 0.9");
+  });
+
+  it("underpainting with custom count", () => {
+    const src = [
+      "underpainting seed:1:",
+      "  count: 5000",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("5000");
+  });
+
+  it("underpainting without body (no colon-only line)", () => {
+    const src = "underpainting seed:1:";
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("mulberry32(1)");
+    expect(r.code).toContain("3000");  // default count
+  });
+});
+
+describe("compile — implicit line continuation (v3)", () => {
+  it("multi-line array expression compiles correctly", () => {
+    const src = [
+      "x = [",
+      "  1,",
+      "  2,",
+      "  3",
+      "]",
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("[1, 2, 3]");
+  });
+
+  it("multi-line function call compiles correctly", () => {
+    const src = [
+      "x = lerp(",
+      "  0.4,",
+      "  0.9,",
+      "  0.5",
+      ")",
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("lerp(0.4, 0.9, 0.5)");
+  });
+
+  it("multi-line object literal compiles correctly", () => {
+    const src = [
+      "x = {",
+      "  a: 1,",
+      "  b: 2",
+      "}",
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("a: 1");
+    expect(r.code).toContain("b: 2");
+  });
+
+  it("nested multi-line brackets compile correctly", () => {
+    const src = [
+      "x = foo([",
+      "  1,",
+      "  2",
+      "])",
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("foo([1, 2])");
+  });
+});
+
+describe("compile — multi-line strings (v3)", () => {
+  it("quoted string spanning two lines joins with space", () => {
+    const src = [
+      'philosophy "Translate plugin layer composites',
+      '  into painterly dab passes."',
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.philosophy).toBe(
+      "Translate plugin layer composites into painterly dab passes."
+    );
+  });
+
+  it("quoted string spanning three lines", () => {
+    const src = [
+      'philosophy "Line one',
+      '  line two',
+      '  line three."',
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.philosophy).toBe("Line one line two line three.");
+  });
+});
+
+describe("compile — multi-line metadata (v3)", () => {
+  it("bare metadata with indented continuation lines", () => {
+    const src = [
+      "philosophy Translate plugin layer composites",
+      "  into painterly dab passes, each with",
+      "  distinct brush character.",
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.philosophy).toContain("Translate");
+    expect(r.metadata.philosophy).toContain("painterly");
+    expect(r.metadata.philosophy).toContain("distinct");
+  });
+
+  it("title with continuation line", () => {
+    const src = [
+      "title Stormy Sea",
+      "  Impressionist",
+      "bg black",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.metadata.title).toBe("Stormy Sea Impressionist");
+  });
+});
+
+describe("compile — multi-line pass body values (v3)", () => {
+  it("pass body value with multi-line array", () => {
+    const src = [
+      "layer terrain:sky dusk",
+      "pass sky seed:100 layer:terrain:sky texture:smooth:",
+      "  color: [",
+      "    floor(lerp(190, 220, rng())),",
+      "    floor(lerp(200, 225, rng())),",
+      "    floor(lerp(220, 245, rng()))",
+      "  ]",
+      "  jitter: 5",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // The color array should appear in the compiled output
+    expect(r.code).toContain("lerp(190, 220");
+    expect(r.code).toContain("lerp(220, 245");
+    // jitter should also be present (not swallowed)
+    expect(r.code).toContain("jitter");
+  });
+
+  it("pass body value with expression continuation", () => {
+    const src = [
+      "param flowInfluence 0.3 range:0..1 step:0.05",
+      "param waveHeight 0.6 range:0.2..1.0 step:0.05",
+      "layer terrain:water choppy-sea",
+      "pass water seed:200 layer:terrain:water texture:rough:",
+      "  angle: flowAngle * flowInfluence",
+      "    + sin(pos.x * 0.008) * 0.15 * waveHeight",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Both parts of the expression should be in the output
+    expect(r.code).toContain("flowAngle");
+    expect(r.code).toContain("sin(");
+    expect(r.code).toContain("waveHeight");
+  });
+
+  it("pass body with multi-line function call in value", () => {
+    const src = [
+      "layer terrain:sky dusk",
+      "pass sky seed:100 layer:terrain:sky texture:smooth:",
+      "  width: lerp(",
+      "    12,",
+      "    24,",
+      "    proximity",
+      "  )",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("lerp(12, 24, proximity)");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 3: library directive
+// ---------------------------------------------------------------------------
+
+describe("compile — library directive", () => {
+  it("library p5.brush emits libraries array", () => {
+    const r = compile(`library "p5.brush"\nbg black`);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.libraries).toHaveLength(1);
+    expect(r.libraries[0]!.name).toBe("p5.brush");
+    expect(r.libraries[0]!.version).toBeUndefined();
+  });
+
+  it("library p5.brush with version override", () => {
+    const r = compile(`library "p5.brush" version:"2.1.0"\nbg black`);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.libraries).toHaveLength(1);
+    expect(r.libraries[0]!.name).toBe("p5.brush");
+    expect(r.libraries[0]!.version).toBe("2.1.0");
+  });
+
+  it("unknown library name → compile error", () => {
+    const r = compile(`library "unknown-lib"\nbg black`);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors[0]!.message).toMatch(/Unknown library "unknown-lib"/);
+  });
+
+  it("p5.brush injects P5_BRUSH_LIB helpers into code", () => {
+    const r = compile(`library "p5.brush"\nbg black`);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("brushStroke");
+    expect(r.code).toContain("watercolorFill");
+    expect(r.code).toContain("hatchRegion");
+  });
+
+  it("no library → libraries array is empty", () => {
+    const r = compile("bg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.libraries).toHaveLength(0);
+  });
+
+  it("library directive does not emit any JavaScript statement", () => {
+    const r = compile(`library "p5.brush"\nbg black`);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // No bare "library" call in generated code (only the injected helpers)
+    const lines = r.code.split("\n").filter(l => /^\s*library\s*\(/.test(l));
+    expect(lines).toHaveLength(0);
   });
 });
