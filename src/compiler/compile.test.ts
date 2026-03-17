@@ -1197,3 +1197,143 @@ describe("compile — paramset templates (v2)", () => {
     expect(r.params[0]!.key).toBe("skyW");
   });
 });
+
+describe("compile — bristlePass directive (v2)", () => {
+  it("basic bristlePass expands to loop with renderBristleStroke", () => {
+    const src = [
+      "param skyDabs 1800 range:500..5000",
+      "param skyDabWidth 19 range:4..40",
+      "param skyBristles 6 range:3..12",
+      "param skyAlphaMin 0.4 range:0..1",
+      "param skyAlphaMax 0.8 range:0..1",
+      "bristlePass sky seed:100 mask:skyMask texture:smooth:",
+      "  count: skyDabs",
+      "  width: skyDabWidth",
+      "  bristles: skyBristles",
+      "  alpha: [skyAlphaMin, skyAlphaMax]",
+      "  angle: flowAngle * 0.3",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Should have the RNG, loop, mask check, color sampling, and stroke call
+    expect(r.code).toContain("mulberry32(100)");
+    expect(r.code).toContain("alphaAt(skyMask,");
+    expect(r.code).toContain("colorAt(base,");
+    expect(r.code).toContain("renderBristleStroke(ctx,");
+    expect(r.code).toContain('"smooth"');
+    expect(r.code).toContain("flowAngle");
+  });
+
+  it("bristlePass with exclude generates exclusion check", () => {
+    const src = [
+      "bristlePass sky seed:100 mask:skyMask texture:smooth:",
+      "  count: 1000",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle * 0.3",
+      "  exclude: nearestBoltDist(pos.x, pos.y) < 30",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("nearestBoltDist");
+    expect(r.code).toContain("< 30");
+  });
+
+  it("bristlePass with custom jitter", () => {
+    const src = [
+      "bristlePass cloud seed:400 mask:cloudMask texture:dry:",
+      "  count: 1800",
+      "  width: 16",
+      "  bristles: 6",
+      "  alpha: [0.25, 0.65]",
+      "  angle: flowAngle * 0.5",
+      "  jitter: colorJitter + 4",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("(colorJitter + 4)");
+    expect(r.code).toContain('"dry"');
+  });
+
+  it("bristlePass with countMul", () => {
+    const src = [
+      "bristlePass rain seed:600 mask:rainMask texture:stipple:",
+      "  count: 2000",
+      "  width: 6",
+      "  bristles: 4",
+      "  alpha: [0.5, 0.85]",
+      "  angle: PI / 2",
+      "  countMul: stormIntensity",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // countMul wraps: floor(((count * dabDensity) * stormIntensity))
+    expect(r.code).toContain("dabDensity");
+    expect(r.code).toContain("stormIntensity");
+  });
+
+  it("bristlePass with steps and stepSize", () => {
+    const src = [
+      "bristlePass rain seed:600 mask:rainMask texture:stipple:",
+      "  count: 2000",
+      "  width: 6",
+      "  bristles: 4",
+      "  alpha: [0.5, 0.85]",
+      "  angle: PI / 2",
+      "  steps: 8",
+      "  stepSize: 2",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("steps: 8");
+    expect(r.code).toContain("stepSize: 2");
+  });
+
+  it("multiple bristlePasses compile independently", () => {
+    const src = [
+      "bristlePass sky seed:100 mask:skyMask texture:smooth:",
+      "  count: 1800",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle * 0.3",
+      "",
+      "bristlePass water seed:200 mask:waterMask texture:rough:",
+      "  count: 2500",
+      "  width: 12",
+      "  bristles: 6",
+      "  alpha: [0.45, 0.9]",
+      "  angle: flowAngle + sin(pos.x * 0.008) * 0.15",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("mulberry32(100)");
+    expect(r.code).toContain("mulberry32(200)");
+    expect(r.code).toContain('"smooth"');
+    expect(r.code).toContain('"rough"');
+    expect(r.code).toContain("alphaAt(skyMask,");
+    expect(r.code).toContain("alphaAt(waterMask,");
+  });
+
+  it("bristlePass does not contain directive keywords in output", () => {
+    const src = [
+      "bristlePass sky seed:100 mask:skyMask texture:smooth:",
+      "  count: 1800",
+      "  width: 19",
+      "  bristles: 6",
+      "  alpha: [0.4, 0.8]",
+      "  angle: flowAngle * 0.3",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).not.toContain("bristlePass");
+  });
+});

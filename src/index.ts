@@ -1,8 +1,8 @@
 import { tokenize } from "./compiler/tokenizer";
 import { parse, ParseError } from "./compiler/parser";
 import { codegen } from "./compiler/codegen";
-import { expandParamSets } from "./compiler/paramset";
-export { tokenize, parse, codegen, ParseError, expandParamSets };
+import { preprocess, expandParamSets } from "./compiler/preprocess";
+export { tokenize, parse, codegen, ParseError, preprocess, expandParamSets };
 export type { Token, TokenKind } from "./compiler/token";
 export type { Program } from "./compiler/ast";
 
@@ -102,7 +102,7 @@ export type CompileResult = CompileSuccess | CompileFailure;
  */
 export function compile(source: string): CompileResult {
   try {
-    const expanded = expandParamSets(source);
+    const expanded = preprocess(source);
     const tokens = tokenize(expanded);
     const program = parse(tokens);
     return codegen(program);
