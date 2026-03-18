@@ -1,6 +1,6 @@
 import type {
   Program, TopLevel, Stmt, Expr, BlockHeader, NamedArg,
-  DrawCmd, BlockStmt, ParamDecl, ColorDecl, LayerDecl, Assign, MultiAssign,
+  DrawCmd, BlockStmt, ParamDecl, ColorDecl, LayerDecl, Assign, MultiAssign, PropAssign,
   BgCmd, UseStmt, UseComponentStmt, SeedStmt, ReturnStmt, PrintStmt, WatchStmt,
   ExprStmt, BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit, ObjectLit,
   Gradient, Lambda, NumberLit, StringLit, ColorLit, Ident,
@@ -238,6 +238,9 @@ export function codegen(program: Program): CompileResult {
       case "watch":
         out.push(`${I}if (typeof __watch__ !== "undefined") __watch__(${JSON.stringify(stmt.label)}, ${emitExpr(stmt.value)});`);
         break;
+      case "prop-assign":
+        out.push(`${I}${emitExpr(stmt.target)} = ${emitExpr(stmt.value)};`);
+        break;
       case "expr-stmt":
         out.push(`${I}${emitExpr(stmt.expr)};`);
         break;
@@ -444,7 +447,17 @@ export function codegen(program: Program): CompileResult {
       case "loop":
         if (h.collect) {
           out.push(`${I}const __arr_${d}__ = Array.from({ length: ${emitExpr(h.count)} }, (_, i) => {`);
-          emitBody(stmt.body, out, d + 1);
+          // Emit all stmts except last normally; last expr-stmt gets `return`
+          const body = stmt.body;
+          if (body.length > 0) {
+            emitBody(body.slice(0, -1), out, d + 1);
+            const last = body[body.length - 1]!;
+            if (last.kind === "expr-stmt") {
+              out.push(`${indent(d + 1)}return ${emitExpr(last.expr)};`);
+            } else {
+              emitStmt(last, out, d + 1);
+            }
+          }
           out.push(`${I}});`);
         } else {
           out.push(`${I}for (let i = 0; i < ${emitExpr(h.count)}; i++) {`);

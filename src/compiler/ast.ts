@@ -121,6 +121,7 @@ export interface NamedArg { name: string; value: Expr; loc: Loc; }
 export type Stmt =
   | Assign
   | MultiAssign
+  | PropAssign
   | DrawCmd
   | BgCmd
   | BlockStmt
@@ -137,6 +138,14 @@ export type Stmt =
 export interface Assign {
   kind: "assign";
   name: string;
+  value: Expr;
+  loc: Loc;
+}
+
+/** `obj.prop = expr` — property assignment */
+export interface PropAssign {
+  kind: "prop-assign";
+  target: Expr;
   value: Expr;
   loc: Loc;
 }

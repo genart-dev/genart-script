@@ -1,7 +1,7 @@
 import type { Token } from "./token";
 import type {
   Program, TopLevel, Stmt, Expr, BlockHeader, NamedArg, Metadata,
-  DrawCmd, BlockStmt, ParamDecl, ColorDecl, LayerDecl, LibraryDecl, Assign, MultiAssign,
+  DrawCmd, BlockStmt, ParamDecl, ColorDecl, LayerDecl, LibraryDecl, Assign, MultiAssign, PropAssign,
   BgCmd, UseStmt, UseComponentStmt, SeedStmt, ReturnStmt, PrintStmt, WatchStmt,
   ExprStmt, Loc, NumberLit, StringLit, ColorLit, Ident,
   BinOp, UnaryOp, Ternary, Call, Prop, ArrayLit, ObjectLit, Gradient, Lambda,
@@ -124,8 +124,8 @@ export function parse(tokens: Token[]): Program {
 
       // param declaration
       if (name === "param") return [parseParamDecl() as unknown as Stmt];
-      // color declaration
-      if (name === "color" && peek(1).kind === "ident") return [parseColorDecl() as unknown as Stmt];
+      // color declaration — name can be ident or named-color token (e.g. `color red #c1272d`)
+      if (name === "color" && (peek(1).kind === "ident" || peek(1).kind === "color")) return [parseColorDecl() as unknown as Stmt];
       // layer declaration
       if (name === "layer") return [parseLayerDecl() as unknown as Stmt];
 
@@ -233,8 +233,14 @@ export function parse(tokens: Token[]): Program {
       }
     }
 
-    // expression statement
+    // expression statement — or property assignment if followed by `=`
     const e = parseExpr();
+    if (check("op", "=") && (e.kind === "prop" || e.kind === "index")) {
+      eat("op", "=");
+      const value = parseExpr();
+      eatNewline();
+      return [{ kind: "prop-assign", target: e, value, loc: { line: t.line, col: t.col } } as PropAssign];
+    }
     eatNewline();
     return [{ kind: "expr-stmt", expr: e, loc: { line: t.line, col: t.col } }];
   }
@@ -277,7 +283,14 @@ export function parse(tokens: Token[]): Program {
   function parseColorDecl(): ColorDecl {
     const l = loc();
     eat("ident", "color");
-    const name = eat("ident").value;
+    // Accept both `ident` and `color` token kinds for the name,
+    // so `color red #c1272d` works even though `red` is a named-color token.
+    const nameToken = cur();
+    if (nameToken.kind !== "ident" && nameToken.kind !== "color") {
+      throw new ParseError(`Expected identifier for color name, got ${nameToken.kind} "${nameToken.value}"`, loc());
+    }
+    pos++;
+    const name = nameToken.value;
     const defExpr = parseExpr();
     const defColor = (defExpr as ColorLit).value;
     let label: string | undefined;
@@ -426,7 +439,7 @@ export function parse(tokens: Token[]): Program {
       case "loop": {
         const count = parseSimpleExpr();
         let collect = false;
-        if (check("op", "=>")) { eat("op", "=>"); collect = true; }
+        if (check("op", "=>")) { eat("op", "=>"); collect = true; if (check("op", ":")) eat("op", ":"); }
         else { eat("op", ":"); }
         header = { type: "loop", count, collect };
         break;
@@ -559,7 +572,14 @@ export function parse(tokens: Token[]): Program {
         eat("lparen");
         const args: Expr[] = [];
         while (!check("rparen") && !check("eof")) {
-          args.push(parseExpr());
+          // Named arg: `key:value` — strip the key, pass value positionally
+          if (cur().kind === "ident" && peek(1).kind === "op" && peek(1).value === ":") {
+            eat("ident"); // skip key
+            eat("op", ":"); // skip colon
+            args.push(parseExpr());
+          } else {
+            args.push(parseExpr());
+          }
           if (check("op", ",")) eat("op", ",");
         }
         eat("rparen");
@@ -739,7 +759,7 @@ export function parse(tokens: Token[]): Program {
     const t = cur();
 
     if (t.kind === "ident" && t.value === "param") return [parseParamDecl()];
-    if (t.kind === "ident" && t.value === "color" && peek(1).kind === "ident") return [parseColorDecl()];
+    if (t.kind === "ident" && t.value === "color" && (peek(1).kind === "ident" || peek(1).kind === "color")) return [parseColorDecl()];
     if (t.kind === "ident" && t.value === "layer") return [parseLayerDecl()];
 
     return parseStmt() as unknown as TopLevel[];

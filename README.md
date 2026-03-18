@@ -144,9 +144,9 @@ for i, v in arr:
 fn wobble x y:
   return sin(x * 0.1 + t) * y
 
-// Lambda
-pts = loop 100 =>
-  return vec(rnd(w), rnd(h))
+// Collect loop (returns array)
+pts = loop 100 =>:
+  vec(rnd(w), rnd(h))          // last expr is implicit return
 
 // Implicit `it` variable
 arr.map(it * 2)
@@ -248,6 +248,25 @@ All effects are function calls inside `post:` blocks.
 | `halftone` | `(dotSize=4, angle=0.3)` | Dot screen effect |
 
 Effects with `quality?` accept `"auto"` (default), `"high"` (always full pixel ops), or `"fast"` (skip or approximate).
+
+Named arguments are supported in function calls:
+
+```
+chromatic_aberration(1, quality:"fast")   // → chromatic_aberration(1, "fast")
+distort(type:"wave", amount:10)           // → distort("wave", 10)
+```
+
+### Property Assignment
+
+Canvas context properties and array/object mutations work naturally:
+
+```
+ctx.lineWidth = 2
+ctx.lineCap = "round"
+ctx.globalAlpha = 0.5 * t
+arr[0] = 99
+obj.nested.prop = 42
+```
 
 ### Built-in Globals
 

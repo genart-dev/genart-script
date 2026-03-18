@@ -2163,3 +2163,152 @@ describe("compile — library directive", () => {
     expect(lines).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bug fixes
+// ---------------------------------------------------------------------------
+
+describe("compile — named args in function calls", () => {
+  it("quality:\"fast\" named arg in effect call", () => {
+    const src = [
+      "post:",
+      '  chromatic_aberration(1, quality:"fast")',
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('chromatic_aberration(1, "fast")');
+  });
+
+  it("multiple named args in function call", () => {
+    const src = [
+      "post:",
+      '  distort(type:"wave", amount:10, quality:"high")',
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('distort("wave", 10, "high")');
+  });
+
+  it("mixed positional and named args", () => {
+    const src = [
+      "post:",
+      '  bloom(0.5, radius:12)',
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("bloom(0.5, 12)");
+  });
+});
+
+describe("compile — collect loop =>", () => {
+  it("loop N =>: collects array with implicit return", () => {
+    const src = [
+      "loop 5 =>:",
+      "  i * 2",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("Array.from");
+    expect(r.code).toContain("return (i * 2)");
+  });
+
+  it("collect loop with multi-statement body returns last", () => {
+    const src = [
+      "loop 10 =>:",
+      "  x = i * 3",
+      "  x + 1",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("Array.from");
+    expect(r.code).toContain("x = (i * 3)");
+    expect(r.code).toContain("return (x + 1)");
+  });
+});
+
+describe("compile — named colors as color variable names", () => {
+  it("color red #hex declares color variable", () => {
+    const r = compile("color red #c1272d\nbg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.colors).toHaveLength(1);
+    expect(r.colors[0]).toMatchObject({ key: "red", default: "#c1272d" });
+    expect(r.code).toContain('let red = __colors__["red"]');
+  });
+
+  it("color green #hex works", () => {
+    const r = compile("color green #00ff00\nbg black");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.colors[0]).toMatchObject({ key: "green", default: "#00ff00" });
+  });
+
+  it("color black #hex works", () => {
+    const r = compile("color black #1a1a1a\nbg white");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.colors[0]).toMatchObject({ key: "black", default: "#1a1a1a" });
+  });
+});
+
+describe("compile — property assignment", () => {
+  it("ctx.lineWidth = 2 compiles", () => {
+    const src = [
+      "frame:",
+      "  ctx.lineWidth = 2",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("ctx.lineWidth = 2;");
+  });
+
+  it("ctx.lineCap = round compiles", () => {
+    const src = [
+      "frame:",
+      '  ctx.lineCap = "round"',
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain('ctx.lineCap = "round";');
+  });
+
+  it("ctx.globalAlpha = expr compiles", () => {
+    const src = [
+      "frame:",
+      "  ctx.globalAlpha = 0.5 * t",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("ctx.globalAlpha = (0.5 * t);");
+  });
+
+  it("nested property assignment compiles", () => {
+    const src = [
+      "frame:",
+      "  obj.nested.prop = 42",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("obj.nested.prop = 42;");
+  });
+
+  it("bracket index assignment compiles", () => {
+    const src = [
+      "frame:",
+      "  arr[0] = 99",
+    ].join("\n");
+    const r = compile(src);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.code).toContain("arr[0] = 99;");
+  });
+});
