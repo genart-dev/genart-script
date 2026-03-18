@@ -130,7 +130,8 @@ export type Stmt =
   | ReturnStmt
   | PrintStmt
   | WatchStmt
-  | ExprStmt;
+  | ExprStmt
+  | LibraryDecl;
 
 /** `x = expr` */
 export interface Assign {
